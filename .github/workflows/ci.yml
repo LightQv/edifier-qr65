@@ -30,7 +30,9 @@ jobs:
           bash -n install.sh uninstall.sh hooks/qr65-theme-sync
           shellcheck install.sh uninstall.sh hooks/qr65-theme-sync
       - name: Check systemd unit
-        run: systemd-analyze --user verify systemd/edifier-qr65.service
+        run: |
+          install -Dm755 /usr/bin/true "$HOME/.local/bin/edifier-qr65"
+          systemd-analyze --user verify systemd/edifier-qr65.service
       - name: Check official plugin layout
         env:
           OMARCHY_COMMIT: 5b91db503c904bbfc5f34bdaaa9c708814958f3d
