@@ -1,0 +1,30 @@
+[Unit]
+Description=Edifier QR65 lighting controller
+After=bluetooth.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/edifier-qr65 daemon
+Restart=always
+RestartSec=3
+# asyncio.run handles SIGINT by cancelling the BLE context before process exit.
+KillSignal=SIGINT
+TimeoutStopSec=8
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=-%h/.config/edifier-qr65 -%h/.local/state/edifier-qr65
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+UMask=0077
+UnsetEnvironment=PYTHONHOME PYTHONPATH
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QR65 Color Calibration</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      background: #111111;
+      color: #f1f1f1;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 50% 25%, #252525 0, #171717 36rem, #0d0d0d 100%);
+    }
+
+    button, input, textarea { font: inherit; }
+
+    button {
+      min-height: 2.75rem;
+      padding: 0.65rem 1rem;
+      border: 1px solid #535353;
+      border-radius: 0.55rem;
+      color: #f1f1f1;
+      background: #242424;
+      cursor: pointer;
+    }
+
+    button:hover { background: #303030; }
+    button:focus-visible, input:focus-visible, textarea:focus-visible {
+      outline: 2px solid #89b4fa;
+      outline-offset: 2px;
+    }
+    button:disabled { cursor: not-allowed; opacity: 0.4; }
+    button.primary { background: #f1f1f1; color: #111111; border-color: #f1f1f1; }
+    button.primary:hover { background: #d8d8d8; }
+
+    main {
+      width: min(72rem, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: clamp(1rem, 3vw, 2.5rem);
+      display: grid;
+      grid-template-columns: minmax(18rem, 1.2fr) minmax(18rem, 0.8fr);
+      gap: clamp(1.5rem, 4vw, 4rem);
+      align-items: center;
+    }
+
+    .reference { text-align: center; }
+    .eyebrow {
+      margin: 0 0 0.5rem;
+      color: #a8a8a8;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h1 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.3rem); }
+    .target-hex {
+      margin: 0.45rem 0 1.25rem;
+      color: #c6c6c6;
+      font: 700 clamp(1.1rem, 2vw, 1.4rem) ui-monospace, monospace;
+      letter-spacing: 0.06em;
+    }
+
+    .swatch {
+      width: min(62vh, 100%);
+      aspect-ratio: 1;
+      margin: 0 auto;
+      border: 1px solid #686868;
+      border-radius: 1rem;
+      box-shadow: 0 1.5rem 5rem rgb(0 0 0 / 45%);
+    }
+
+    .card {
+      padding: clamp(1.2rem, 3vw, 2rem);
+      border: 1px solid #353535;
+      border-radius: 1rem;
+      background: rgb(24 24 24 / 92%);
+      box-shadow: 0 1rem 4rem rgb(0 0 0 / 30%);
+    }
+
+    .progress-row, .actions, .file-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    progress { width: 100%; height: 0.55rem; margin: 0.9rem 0 1.5rem; accent-color: #89b4fa; }
+    .instructions { margin: 0 0 1.5rem; color: #c6c6c6; line-height: 1.5; }
+
+    label.field { display: block; margin: 1rem 0; font-weight: 650; }
+    input[type="text"], textarea {
+      width: 100%;
+      margin-top: 0.45rem;
+      border: 1px solid #4b4b4b;
+      border-radius: 0.5rem;
+      color: #f1f1f1;
+      background: #101010;
+    }
+    input[type="text"] {
+      height: 3rem;
+      padding: 0 0.8rem;
+      font: 700 1.1rem ui-monospace, monospace;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+    textarea { min-height: 5rem; padding: 0.7rem 0.8rem; resize: vertical; }
+
+    .check-row { display: flex; gap: 0.65rem; align-items: flex-start; color: #d0d0d0; }
+    .check-row input { width: 1.15rem; height: 1.15rem; margin-top: 0.15rem; accent-color: #89b4fa; }
+    .error { min-height: 1.4rem; margin: 0.55rem 0; color: #ff8e8e; }
+    .success { min-height: 1.4rem; margin: -0.4rem 0 0.75rem; color: #a6e3a1; }
+    .actions { margin-top: 0.5rem; }
+    .file-actions { margin-top: 1.5rem; justify-content: flex-start; flex-wrap: wrap; }
+    .muted { color: #969696; font-size: 0.85rem; line-height: 1.4; }
+    #importFile { display: none; }
+
+    @media (max-width: 760px) {
+      main { grid-template-columns: 1fr; align-items: start; }
+      .swatch { width: min(75vw, 24rem); }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="reference" aria-labelledby="sampleTitle">
+      <p class="eyebrow" id="sampleNumber"></p>
+      <h1 id="sampleTitle">Reference color</h1>
+      <p class="target-hex" id="targetHex"></p>
+      <div class="swatch" id="swatch" role="img" aria-label="Calibration reference color"></div>
+    </section>
+
+    <section class="card" aria-label="Calibration measurement">
+      <div class="progress-row">
+        <strong id="progressText"></strong>
+        <span class="muted">Brightness 50%</span>
+      </div>
+      <progress id="progress" max="32" value="0"></progress>
+
+      <p class="instructions">
+        In ConneX, select static color and keep brightness at 50%. Adjust only RGB until the
+        QR65 visually matches the reference swatch, then enter the ConneX hex below.
+      </p>
+
+      <label class="field" for="commandHex">
+        Matching ConneX hex
+        <input id="commandHex" type="text" inputmode="text" maxlength="7"
+          placeholder="#RRGGBB" autocomplete="off" spellcheck="false">
+      </label>
+
+      <label class="check-row" for="closest">
+        <input id="closest" type="checkbox">
+        <span>This is only the closest possible match; the QR65 cannot reproduce the target exactly.</span>
+      </label>
+
+      <label class="field" for="notes">
+        Notes <span class="muted">(optional)</span>
+        <textarea id="notes" placeholder="For example: still slightly too green"></textarea>
+      </label>
+
+      <p class="error" id="error" role="alert"></p>
+      <p class="success" id="completion" role="status" aria-live="polite"></p>
+
+      <div class="actions">
+        <button id="previous" type="button">Previous</button>
+        <button id="next" class="primary" type="button">Save &amp; next</button>
+      </div>
+
+      <div class="file-actions">
+        <button id="export" type="button">Export JSON</button>
+        <button id="import" type="button">Import JSON</button>
+        <input id="importFile" type="file" accept="application/json,.json">
+      </div>
+      <p class="muted">Progress is stored locally in this browser. Export is safe at any time.</p>
+    </section>
+  </main>
+
+  <script>
+    "use strict";
+
+    const STORAGE_KEY = "qr65-calibration-v1";
+    const samples = [
+      { id: "T13", role: "fit", target: "#E68E0D" },
+      { id: "T03", role: "fit", target: "#00FF00" },
+      { id: "V03", role: "validation", target: "#CBA6F7" },
+      { id: "T22", role: "fit", target: "#BFBFBF" },
+      { id: "T06", role: "fit", target: "#000080" },
+      { id: "T19", role: "fit", target: "#FF79C6" },
+      { id: "V06", role: "validation", target: "#94E2D5" },
+      { id: "T09", role: "fit", target: "#00FFFF" },
+      { id: "T02", role: "fit", target: "#800000" },
+      { id: "T15", role: "fit", target: "#7DAEA3" },
+      { id: "V01", role: "validation", target: "#F1FA8C" },
+      { id: "T12", role: "fit", target: "#800080" },
+      { id: "T17", role: "fit", target: "#50FA7B" },
+      { id: "T24", role: "fit", target: "#303030" },
+      { id: "V08", role: "validation", target: "#6272A4" },
+      { id: "T07", role: "fit", target: "#FFFF00" },
+      { id: "T14", role: "fit", target: "#BD93F9" },
+      { id: "T01", role: "fit", target: "#FF0000" },
+      { id: "V04", role: "validation", target: "#A6E3A1" },
+      { id: "T20", role: "fit", target: "#FFB86C" },
+      { id: "T10", role: "fit", target: "#008080" },
+      { id: "T23", role: "fit", target: "#808080" },
+      { id: "V07", role: "validation", target: "#FAB387" },
+      { id: "T05", role: "fit", target: "#0000FF" },
+      { id: "T16", role: "fit", target: "#FF5555" },
+      { id: "T08", role: "fit", target: "#808000" },
+      { id: "V02", role: "validation", target: "#8BE9FD" },
+      { id: "T21", role: "fit", target: "#FFFFFF" },
+      { id: "T04", role: "fit", target: "#008000" },
+      { id: "T18", role: "fit", target: "#89B4FA" },
+      { id: "V05", role: "validation", target: "#F38BA8" },
+      { id: "T11", role: "fit", target: "#FF00FF" }
+    ];
+
+    let current = 0;
+    let measurements = loadMeasurements();
+
+    const sampleNumber = document.querySelector("#sampleNumber");
+    const targetHex = document.querySelector("#targetHex");
+    const swatch = document.querySelector("#swatch");
+    const progressText = document.querySelector("#progressText");
+    const progress = document.querySelector("#progress");
+    const commandHex = document.querySelector("#commandHex");
+    const closest = document.querySelector("#closest");
+    const notes = document.querySelector("#notes");
+    const error = document.querySelector("#error");
+    const completion = document.querySelector("#completion");
+    const previous = document.querySelector("#previous");
+    const next = document.querySelector("#next");
+    const importFile = document.querySelector("#importFile");
+
+    function isHex(value) {
+      return /^#[0-9A-F]{6}$/.test(value);
+    }
+
+    function normalizeHex(value) {
+      const trimmed = value.trim().toUpperCase();
+      return trimmed && !trimmed.startsWith("#") ? `#${trimmed}` : trimmed;
+    }
+
+    function loadMeasurements() {
+      try {
+        const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+        return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+      } catch (_error) {
+        return {};
+      }
+    }
+
+    function persist() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(measurements));
+    }
+
+    function completedCount() {
+      return samples.filter(sample => isHex(measurements[sample.id]?.command || "")).length;
+    }
+
+    function render() {
+      const sample = samples[current];
+      const saved = measurements[sample.id] || {};
+      sampleNumber.textContent = `Color ${current + 1} of ${samples.length}`;
+      targetHex.textContent = sample.target;
+      swatch.style.backgroundColor = sample.target;
+      swatch.setAttribute("aria-label", `Reference color ${sample.target}`);
+      commandHex.value = saved.command || "";
+      closest.checked = Boolean(saved.closest);
+      notes.value = saved.notes || "";
+      error.textContent = "";
+      previous.disabled = current === 0;
+      const count = completedCount();
+      const finalSaved = current === samples.length - 1 && isHex(saved.command || "");
+      next.textContent = finalSaved ? "Saved" : current === samples.length - 1
+        ? "Save measurement" : "Save & next";
+      completion.textContent = count === samples.length
+        ? "Calibration complete. Export JSON to save the finished measurements." : "";
+      progress.value = count;
+      progressText.textContent = `${count} of ${samples.length} measured`;
+      document.title = `${current + 1}/${samples.length} ${sample.target} - QR65 Calibration`;
+    }
+
+    function saveCurrent(requireHex = true) {
+      const command = normalizeHex(commandHex.value);
+      commandHex.value = command;
+      if (!isHex(command)) {
+        if (requireHex) error.textContent = "Enter the matching color as #RRGGBB.";
+        return false;
+      }
+      const sample = samples[current];
+      measurements[sample.id] = {
+        command,
+        closest: closest.checked,
+        notes: notes.value.trim()
+      };
+      persist();
+      error.textContent = "";
+      return true;
+    }
+
+    function exportData() {
+      if (normalizeHex(commandHex.value) === "") {
+        delete measurements[samples[current].id];
+        persist();
+      } else if (!saveCurrent(true)) {
+        return;
+      }
+      render();
+      const data = {
+        version: 1,
+        brightness: 50,
+        generatedAt: new Date().toISOString(),
+        measurements: samples.map(sample => ({
+          id: sample.id,
+          role: sample.role,
+          target: sample.target,
+          command: measurements[sample.id]?.command || null,
+          closest: Boolean(measurements[sample.id]?.closest),
+          notes: measurements[sample.id]?.notes || ""
+        }))
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2) + "\n"], { type: "application/json" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "qr65-calibration.json";
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
+    function importData(file) {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => {
+        try {
+          const data = JSON.parse(String(reader.result));
+          if (data.version !== 1 || data.brightness !== 50 || !Array.isArray(data.measurements)) {
+            throw new Error("unsupported calibration file");
+          }
+          const imported = {};
+          for (const item of data.measurements) {
+            const sample = samples.find(candidate => candidate.id === item.id);
+            if (!sample || item.target !== sample.target || item.command === null) continue;
+            const command = normalizeHex(String(item.command));
+            if (!isHex(command)) throw new Error(`invalid command for ${item.id}`);
+            imported[item.id] = {
+              command,
+              closest: Boolean(item.closest),
+              notes: typeof item.notes === "string" ? item.notes : ""
+            };
+          }
+          measurements = imported;
+          persist();
+          render();
+        } catch (importError) {
+          error.textContent = `Cannot import file: ${importError.message}`;
+        }
+      });
+      reader.readAsText(file);
+    }
+
+    previous.addEventListener("click", () => {
+      if (!saveCurrent(true)) return;
+      current = Math.max(0, current - 1);
+      render();
+    });
+    next.addEventListener("click", () => {
+      if (!saveCurrent(true)) return;
+      if (current < samples.length - 1) current += 1;
+      render();
+    });
+    function markDirty() {
+      error.textContent = "";
+      completion.textContent = "";
+      if (current === samples.length - 1) next.textContent = "Save measurement";
+    }
+
+    commandHex.addEventListener("input", markDirty);
+    closest.addEventListener("change", markDirty);
+    notes.addEventListener("input", markDirty);
+    document.querySelector("#export").addEventListener("click", exportData);
+    document.querySelector("#import").addEventListener("click", () => importFile.click());
+    importFile.addEventListener("change", () => {
+      if (importFile.files.length) importData(importFile.files[0]);
+      importFile.value = "";
+    });
+
+    render();
+  </script>
+</body>
+</html>

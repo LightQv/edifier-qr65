@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install test dependencies
+        run: python -m pip install '.[test,calibration]' 'build>=1,<2'
+      - name: Test backend
+        run: python -m pytest -q -p no:cacheprovider
+      - name: Refit calibration profile
+        run: python calibration/fit.py
+      - name: Build Python distributions
+        run: python -m build
+      - name: Check shell scripts
+        run: |
+          bash -n install.sh uninstall.sh hooks/qr65-theme-sync
+          shellcheck install.sh uninstall.sh hooks/qr65-theme-sync
+      - name: Check systemd unit
+        run: systemd-analyze --user verify systemd/edifier-qr65.service
+      - name: Check official plugin layout
+        env:
+          OMARCHY_COMMIT: 5b91db503c904bbfc5f34bdaaa9c708814958f3d
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/omacom/omarchy.git /tmp/omarchy
+          git -C /tmp/omarchy checkout --detach "$OMARCHY_COMMIT"
+          PATH="/tmp/omarchy/bin:$PATH" omarchy-plugin-validate .

@@ -1,0 +1,11 @@
+research/apk/
+research/captures/
+research/decoded/
+research/jadx/
+research/notes/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.venv/
+build/
+dist/

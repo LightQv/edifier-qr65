@@ -1,0 +1,263 @@
+{
+  "version": 1,
+  "brightness": 50,
+  "generatedAt": "2026-09-08T20:16:23.535Z",
+  "measurements": [
+    {
+      "id": "T13",
+      "role": "fit",
+      "target": "#E68E0D",
+      "command": "#FF3000",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T03",
+      "role": "fit",
+      "target": "#00FF00",
+      "command": "#3CFF00",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "V03",
+      "role": "validation",
+      "target": "#CBA6F7",
+      "command": "#FF40A6",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T22",
+      "role": "fit",
+      "target": "#BFBFBF",
+      "command": "#FFFFFF",
+      "closest": true,
+      "notes": "still slightly too blue but seems that a really neutral color as gray or white isn't possible. #FFFFFF is literally white but LEDs still looks blueish"
+    },
+    {
+      "id": "T06",
+      "role": "fit",
+      "target": "#000080",
+      "command": "#2501FF",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T19",
+      "role": "fit",
+      "target": "#FF79C6",
+      "command": "#FF252A",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "V06",
+      "role": "validation",
+      "target": "#94E2D5",
+      "command": "#96FF71",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T09",
+      "role": "fit",
+      "target": "#00FFFF",
+      "command": "#5CFFB9",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T02",
+      "role": "fit",
+      "target": "#800000",
+      "command": "#FF0000",
+      "closest": true,
+      "notes": "Not dark enough"
+    },
+    {
+      "id": "T15",
+      "role": "fit",
+      "target": "#7DAEA3",
+      "command": "#C5FFB0",
+      "closest": true,
+      "notes": "Not ternish enough"
+    },
+    {
+      "id": "V01",
+      "role": "validation",
+      "target": "#F1FA8C",
+      "command": "#FF8F17",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T12",
+      "role": "fit",
+      "target": "#800080",
+      "command": "#FF0146",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T17",
+      "role": "fit",
+      "target": "#50FA7B",
+      "command": "#5CFF1A",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T24",
+      "role": "fit",
+      "target": "#303030",
+      "command": "#303030",
+      "closest": true,
+      "notes": "Same issue as white gray, neutral are blueish."
+    },
+    {
+      "id": "V08",
+      "role": "validation",
+      "target": "#6272A4",
+      "command": "#C68AFF",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T07",
+      "role": "fit",
+      "target": "#FFFF00",
+      "command": "#FF8C04",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T14",
+      "role": "fit",
+      "target": "#BD93F9",
+      "command": "#FF447A",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T01",
+      "role": "fit",
+      "target": "#FF0000",
+      "command": "#FF0000",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "V04",
+      "role": "validation",
+      "target": "#A6E3A1",
+      "command": "#CCFF3D",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T20",
+      "role": "fit",
+      "target": "#FFB86C",
+      "command": "#FF470D",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T10",
+      "role": "fit",
+      "target": "#008080",
+      "command": "#3FFF5E",
+      "closest": true,
+      "notes": "No dark/tern enough"
+    },
+    {
+      "id": "T23",
+      "role": "fit",
+      "target": "#808080",
+      "command": "#808080",
+      "closest": true,
+      "notes": "Not neutral enough still a bit bluish"
+    },
+    {
+      "id": "V07",
+      "role": "validation",
+      "target": "#FAB387",
+      "command": "#FF4514",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T05",
+      "role": "fit",
+      "target": "#0000FF",
+      "command": "#0A00FF",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T16",
+      "role": "fit",
+      "target": "#FF5555",
+      "command": "#FF0F06",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T08",
+      "role": "fit",
+      "target": "#808000",
+      "command": "#FFAF00",
+      "closest": true,
+      "notes": "still slightly too bright not dark/ternish enough"
+    },
+    {
+      "id": "V02",
+      "role": "validation",
+      "target": "#8BE9FD",
+      "command": "#B1FFDE",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T21",
+      "role": "fit",
+      "target": "#FFFFFF",
+      "command": "#FFFFFF",
+      "closest": true,
+      "notes": "Still not neutral enough and too bluish"
+    },
+    {
+      "id": "T04",
+      "role": "fit",
+      "target": "#008000",
+      "command": "#41FF00",
+      "closest": true,
+      "notes": "Lack a bit of dark"
+    },
+    {
+      "id": "T18",
+      "role": "fit",
+      "target": "#89B4FA",
+      "command": "#9C97FF",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "V05",
+      "role": "validation",
+      "target": "#F38BA8",
+      "command": "#FF2923",
+      "closest": false,
+      "notes": ""
+    },
+    {
+      "id": "T11",
+      "role": "fit",
+      "target": "#FF00FF",
+      "command": "#FF004E",
+      "closest": false,
+      "notes": ""
+    }
+  ]
+}

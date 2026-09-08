@@ -1,0 +1,5 @@
+#!/bin/bash
+
+if ! "$HOME/.local/bin/edifier-qr65" theme-sync >/dev/null 2>&1; then
+  logger -t edifier-qr65 "failed to queue the Omarchy theme accent"
+fi
