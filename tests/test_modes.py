@@ -1,95 +1,64 @@
-import subprocess
 import threading
 from pathlib import Path
 
 import pytest
 
 from edifier_qr65.config import Config, load_config, save_config
-from edifier_qr65.theme import (
+from edifier_qr65.desired import (
+    read_request,
     read_requested_color,
-    request_file,
     request_color,
     set_dynamic_mode,
     set_static_mode,
     sync_desired,
-    sync_omarchy_accent,
 )
 
 
-def completed(stdout: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess([], 0, stdout=stdout, stderr="")
+def test_dynamic_mode_queues_explicit_external_color(xdg_dirs) -> None:
+    save_config(Config(mode="static", static_color="#112233"))
+    result = set_dynamic_mode("#89b4fa")
 
-
-def test_dynamic_accent_success_queues_validated_accent(
-    xdg_dirs, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    save_config(Config(mode="dynamic", static_color="#112233"))
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: completed("#89b4fa\n"))
-    result = sync_desired()
     assert result.color == "#89B4FA"
-    assert result.source == "theme-accent"
-    assert read_requested_color() == (0x89, 0xB4, 0xFA)
-    assert '"source":"theme-accent"' in request_file().read_text()
-
-
-def test_omarchy_lookup_uses_three_second_inner_timeout(
-    xdg_dirs, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    save_config(Config())
-
-    def run(*args, **kwargs):
-        assert kwargs["timeout"] == 3
-        return completed("#112233")
-
-    monkeypatch.setattr(subprocess, "run", run)
-    sync_desired()
-
-
-@pytest.mark.parametrize(
-    "failure",
-    [subprocess.CalledProcessError(1, ["omarchy"]),
-     subprocess.TimeoutExpired(["omarchy"], 5), OSError("missing")],
-)
-def test_dynamic_lookup_failure_queues_fallback_and_preserves_mode(
-    xdg_dirs, monkeypatch: pytest.MonkeyPatch, failure: Exception
-) -> None:
-    save_config(Config(mode="dynamic", static_color="#112233"))
-
-    def fail(*args, **kwargs):
-        raise failure
-
-    monkeypatch.setattr(subprocess, "run", fail)
-    result = sync_desired()
-    assert result.source == "static-fallback"
-    assert read_requested_color() == (0x11, 0x22, 0x33)
+    assert result.source == "dynamic"
     assert load_config().mode == "dynamic"
+    assert read_requested_color() == (0x89, 0xB4, 0xFA)
+    assert read_request().source == "dynamic"
 
 
-def test_invalid_dynamic_accent_uses_fallback(xdg_dirs, monkeypatch: pytest.MonkeyPatch) -> None:
-    save_config(Config(mode="dynamic", static_color="#445566"))
-    monkeypatch.setattr(subprocess, "run", lambda *args, **kwargs: completed("not-a-color"))
-    assert sync_desired().source == "static-fallback"
+def test_dynamic_mode_rejects_invalid_color_without_changes(xdg_dirs) -> None:
+    save_config(Config(mode="static", static_color="#112233"))
+    request_color("#445566", "static")
+
+    with pytest.raises(ValueError, match="#RRGGBB"):
+        set_dynamic_mode("invalid")
+
+    assert load_config() == Config(mode="static", static_color="#112233")
     assert read_requested_color() == (0x44, 0x55, 0x66)
-
-
-def test_static_theme_hook_is_successful_noop(xdg_dirs, monkeypatch: pytest.MonkeyPatch) -> None:
-    save_config(Config(mode="static", static_color="#ABCDEF"))
-    request_color("#010203", "direct")
-
-    def unexpected(*args, **kwargs):
-        raise AssertionError("theme lookup must not run")
-
-    monkeypatch.setattr(subprocess, "run", unexpected)
-    assert sync_omarchy_accent() == "#ABCDEF"
-    assert read_requested_color() == (1, 2, 3)
 
 
 def test_explicit_sync_requeues_static_color(xdg_dirs) -> None:
     save_config(Config(mode="static", static_color="#ABCDEF"))
     request_color("#010203")
     result = sync_desired()
+
     assert result.source == "static"
     assert read_requested_color() == (0xAB, 0xCD, 0xEF)
+
+
+def test_explicit_sync_requeues_dynamic_color(xdg_dirs) -> None:
+    save_config(Config(mode="dynamic"))
+    request_color("#ABCDEF", "dynamic")
+    result = sync_desired()
+
+    assert result.color == "#ABCDEF"
+    assert result.source == "dynamic"
+    assert read_requested_color() == (0xAB, 0xCD, 0xEF)
+
+
+def test_dynamic_sync_requires_an_existing_request(xdg_dirs) -> None:
+    save_config(Config(mode="dynamic"))
+    with pytest.raises(ValueError, match="no requested color"):
+        sync_desired()
 
 
 def test_invalid_config_preserves_last_requested_color(xdg_dirs) -> None:
@@ -106,29 +75,32 @@ def test_concurrent_mode_changes_cannot_split_config_and_request(
     xdg_dirs, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     save_config(Config(mode="static", static_color="#010203"))
-    resolving = threading.Event()
+    dynamic_started = threading.Event()
     release = threading.Event()
     static_started = threading.Event()
     static_done = threading.Event()
 
-    def resolve() -> str:
-        resolving.set()
-        assert release.wait(2)
-        return "#AABBCC"
+    original = __import__("edifier_qr65.desired", fromlist=["_request_color"])._request_color
+
+    def blocked_request(value: str, source: str = "direct"):
+        if source == "dynamic":
+            dynamic_started.set()
+            assert release.wait(2)
+        return original(value, source)
 
     def dynamic() -> None:
-        set_dynamic_mode()
+        set_dynamic_mode("#AABBCC")
 
     def static() -> None:
         static_started.set()
         set_static_mode("#445566")
         static_done.set()
 
-    monkeypatch.setattr("edifier_qr65.theme._resolve_accent", resolve)
+    monkeypatch.setattr("edifier_qr65.desired._request_color", blocked_request)
     dynamic_thread = threading.Thread(target=dynamic)
     static_thread = threading.Thread(target=static)
     dynamic_thread.start()
-    assert resolving.wait(2)
+    assert dynamic_started.wait(2)
     static_thread.start()
     assert static_started.wait(2)
     assert not static_done.wait(0.1)
@@ -142,11 +114,10 @@ def test_concurrent_mode_changes_cannot_split_config_and_request(
     assert read_requested_color() == (0x44, 0x55, 0x66)
 
 
-def test_mode_changes_preserve_brightness_and_matching(xdg_dirs, monkeypatch) -> None:
+def test_mode_changes_preserve_brightness_and_matching(xdg_dirs) -> None:
     save_config(Config(mode="static", brightness=63, color_matching=False))
-    monkeypatch.setattr(subprocess, "run", lambda *_args, **_kwargs: completed("#123456"))
 
-    set_dynamic_mode()
+    set_dynamic_mode("#123456")
     assert load_config() == Config(
         mode="dynamic", brightness=63, color_matching=False
     )

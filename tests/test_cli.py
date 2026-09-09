@@ -5,7 +5,7 @@ import subprocess
 from edifier_qr65.cli import main
 from edifier_qr65.config import Config, config_file, load_config, save_config
 from edifier_qr65.status import read_runtime_status, write_runtime_status
-from edifier_qr65.theme import read_requested_color, request_color
+from edifier_qr65.desired import ownership_lock, read_requested_color, request_color
 
 
 def test_device_cannot_bypass_direct_write_gate(xdg_dirs, capsys) -> None:
@@ -40,6 +40,12 @@ def test_scan_rejects_invalid_timeout(capsys) -> None:
     assert capsys.readouterr().err == "error: timeout must be a finite positive number\n"
 
 
+def test_inspect_refuses_when_daemon_owns_ble(xdg_dirs, capsys) -> None:
+    with ownership_lock():
+        assert main(["inspect", "--device", "AA:BB"]) == 1
+    assert capsys.readouterr().err == "error: QR65 BLE control is already owned\n"
+
+
 def test_mode_static_persists_and_queues(xdg_dirs, capsys) -> None:
     assert main(["mode", "static", "#12abCD"]) == 0
     assert load_config() == Config(mode="static", static_color="#12ABCD")
@@ -66,24 +72,21 @@ def test_invalid_static_input_does_not_create_config_or_queue(xdg_dirs, capsys) 
     assert capsys.readouterr().err == "error: color must use #RRGGBB format\n"
 
 
-def test_mode_dynamic_persists_and_syncs(xdg_dirs, monkeypatch, capsys) -> None:
+def test_mode_dynamic_persists_external_color(xdg_dirs, capsys) -> None:
     save_config(Config(mode="static", static_color="#112233"))
-    monkeypatch.setattr(
-        subprocess, "run",
-        lambda *args, **kwargs: subprocess.CompletedProcess([], 0, "#AABBCC\n", ""),
-    )
-    assert main(["mode", "dynamic"]) == 0
+    assert main(["mode", "dynamic", "#AABBCC"]) == 0
     assert load_config().mode == "dynamic"
     assert read_requested_color() == (0xAA, 0xBB, 0xCC)
     assert capsys.readouterr().out == "Mode dynamic; queued #AABBCC\n"
 
 
-def test_theme_sync_static_is_noop(xdg_dirs, capsys) -> None:
-    save_config(Config(mode="static", static_color="#112233"))
-    request_color("#445566")
-    assert main(["theme-sync"]) == 0
-    assert read_requested_color() == (0x44, 0x55, 0x66)
-    assert capsys.readouterr().out == "Static mode; theme sync ignored\n"
+def test_api_version_json_contract(capsys) -> None:
+    assert main(["api-version", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {
+        "apiVersion": 1,
+        "daemonVersion": "0.1.0",
+        "statusVersion": 1,
+    }
 
 
 def test_status_json_contract(xdg_dirs, capsys) -> None:
@@ -102,7 +105,7 @@ def test_status_json_contract(xdg_dirs, capsys) -> None:
 
 def test_human_status_distinguishes_queued_and_applied(xdg_dirs, capsys) -> None:
     save_config(Config())
-    request_color("#112233", "theme-accent")
+    request_color("#112233", "dynamic")
     write_runtime_status("connected", "#445566")
     assert main(["status"]) == 0
     output = capsys.readouterr().out
@@ -129,7 +132,7 @@ def test_release_stops_service_and_persists_handoff_state(
     assert runtime["connection"] == "released"
     assert runtime["appliedColor"] == "#112233"
     assert runtime["appliedBrightness"] == 40
-    assert calls[0][0] == ["systemctl", "--user", "stop", "edifier-qr65.service"]
+    assert calls[0][0] == ["/usr/bin/systemctl", "--user", "stop", "edifier-qr65.service"]
 
 
 def test_resume_starts_service(xdg_dirs, monkeypatch, capsys) -> None:
@@ -143,7 +146,7 @@ def test_resume_starts_service(xdg_dirs, monkeypatch, capsys) -> None:
 
     assert main(["resume"]) == 0
     assert capsys.readouterr().out == "QR65 daemon resumed\n"
-    assert calls == [["systemctl", "--user", "start", "edifier-qr65.service"]]
+    assert calls == [["/usr/bin/systemctl", "--user", "start", "edifier-qr65.service"]]
 
 
 def test_daemon_sigint_exits_cleanly(monkeypatch, capsys) -> None:

@@ -11,10 +11,11 @@ from .ble import ColorApplicationError, QR65Connection, discover
 from .color import match_rgb
 from .config import load_config
 from .protocol import QR65_STATIC_MODE
-from .status import write_runtime_status
-from .theme import Request, ownership_lock, read_request
+from .status import MAX_MESSAGE_SIZE, write_runtime_status
+from .desired import Request, ownership_lock, read_request
 
 LOG = logging.getLogger(__name__)
+_sleep = asyncio.sleep
 
 
 async def _run_owned() -> None:
@@ -25,8 +26,16 @@ async def _run_owned() -> None:
     last_brightness: int | None = None
     last_error = ""
     blocked_request: tuple[int, tuple[int, int, int], int | None, bool] | None = None
+    heartbeat_connection = "starting"
+    heartbeat_applied: tuple[int, int, int] | None = None
+    heartbeat_message = ""
 
     def report(connection: str, applied: tuple[int, int, int] | None = None, message: str = "") -> None:
+        nonlocal heartbeat_connection, heartbeat_applied, heartbeat_message
+        message = message[:MAX_MESSAGE_SIZE]
+        heartbeat_connection = connection
+        heartbeat_applied = applied
+        heartbeat_message = message
         try:
             color = None if applied is None else "#%02X%02X%02X" % applied
             write_runtime_status(
@@ -35,7 +44,16 @@ async def _run_owned() -> None:
         except OSError as error:
             LOG.warning("cannot write daemon status: %s", error)
 
+    async def heartbeat() -> None:
+        while True:
+            await _sleep(5)
+            report(heartbeat_connection, heartbeat_applied, heartbeat_message)
+
     report("starting", last_applied)
+    heartbeat_task = asyncio.create_task(heartbeat())
+    owner_task = asyncio.current_task()
+    if owner_task is not None:
+        owner_task.add_done_callback(lambda _task: heartbeat_task.cancel())
     while True:
         try:
             report("scanning", last_applied, last_error)

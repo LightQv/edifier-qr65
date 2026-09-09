@@ -3,7 +3,7 @@ import multiprocessing
 
 import pytest
 
-from edifier_qr65.theme import (
+from edifier_qr65.desired import (
     operation_lock,
     ownership_lock,
     parse_rgb,
@@ -72,19 +72,19 @@ def test_missing_request_json_reads_safe_legacy_color(xdg_dirs) -> None:
 
 
 def test_request_json_contains_complete_atomic_contract(xdg_dirs) -> None:
-    request_color("#ABCDEF", "theme-accent")
+    request_color("#ABCDEF", "dynamic")
 
     data = json.loads(request_file().read_text())
 
     assert data["version"] == 1
     assert data["color"] == "#ABCDEF"
-    assert data["source"] == "theme-accent"
+    assert data["source"] == "dynamic"
     assert type(data["updatedAt"]) is int
     assert not list(request_file().parent.glob(".request-*"))
 
 
 def test_repeated_request_gets_new_generation(xdg_dirs, monkeypatch) -> None:
-    monkeypatch.setattr("edifier_qr65.theme.time.time", lambda: 100)
+    monkeypatch.setattr("edifier_qr65.desired.time.time", lambda: 100)
     request_color("#112233")
     first = read_request()
     request_color("#112233")
@@ -92,6 +92,11 @@ def test_repeated_request_gets_new_generation(xdg_dirs, monkeypatch) -> None:
 
     assert first is not None and second is not None
     assert second.updated_at == first.updated_at + 1
+
+
+def test_request_rejects_oversized_source(xdg_dirs) -> None:
+    with pytest.raises(ValueError, match="1..128"):
+        request_color("#112233", "x" * 129)
 
 
 def test_operation_lock_blocks_another_process(xdg_dirs) -> None:

@@ -12,12 +12,13 @@ from typing import Any
 
 from .ble import QR65_SERVICE_UUIDS
 from .config import Config
-from .theme import parse_rgb, read_request, state_file
+from .desired import parse_rgb, read_request, state_file
 
 STATUS_VERSION = 1
-STATUS_STALE_SECONDS = 15
+STATUS_STALE_SECONDS = 60
 STATUS_FUTURE_SKEW_SECONDS = 5
 MAX_STATUS_SIZE = 64 * 1024
+MAX_MESSAGE_SIZE = 2048
 CONNECTION_STATES = {
     "starting", "scanning", "activation-required", "connecting", "connected", "released", "error"
 }
@@ -39,10 +40,14 @@ def write_runtime_status(
     """Validate and atomically write one daemon heartbeat."""
     if connection not in CONNECTION_STATES:
         raise ValueError("invalid connection state")
+    if not isinstance(message, str) or len(message) > MAX_MESSAGE_SIZE:
+        raise ValueError(f"message must be at most {MAX_MESSAGE_SIZE} characters")
     if applied_color is not None:
         parse_rgb(applied_color)
         applied_color = applied_color.upper()
-    if applied_brightness is not None and not 0 <= applied_brightness <= 100:
+    if applied_brightness is not None and (
+        type(applied_brightness) is not int or not 0 <= applied_brightness <= 100
+    ):
         raise ValueError("applied brightness must be between 0 and 100")
     payload = {
         "version": STATUS_VERSION,
@@ -71,9 +76,11 @@ def write_runtime_status(
 
 
 def _read_json(path: Path, maximum: int) -> dict[str, Any]:
-    if path.stat().st_size > maximum:
+    with path.open("rb") as source:
+        raw = source.read(maximum + 1)
+    if len(raw) > maximum:
         raise ValueError("file is too large")
-    value = json.loads(path.read_text(encoding="utf-8"))
+    value = json.loads(raw.decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError("JSON root is not an object")
     return value
@@ -83,7 +90,7 @@ def _legacy_connected_status(current: int) -> dict[str, Any] | None:
     """Detect the pre-status daemon's held connection without touching BLE."""
     try:
         result = subprocess.run(
-            ["bluetoothctl", "devices", "Connected"],
+            ["/usr/bin/bluetoothctl", "devices", "Connected"],
             check=True,
             capture_output=True,
             text=True,
@@ -99,7 +106,7 @@ def _legacy_connected_status(current: int) -> dict[str, Any] | None:
     for address in addresses:
         try:
             info = subprocess.run(
-                ["bluetoothctl", "info", address],
+                ["/usr/bin/bluetoothctl", "info", address],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -137,14 +144,16 @@ def read_runtime_status(
         return {"connection": "error", "appliedColor": None, "appliedBrightness": None,
                 "message": "Daemon status unavailable", "updatedAt": 0}
     try:
-        if data.get("version") != STATUS_VERSION:
+        if type(data.get("version")) is not int or data["version"] != STATUS_VERSION:
             raise ValueError("unsupported status version")
         connection = data["connection"]
         applied = data["appliedColor"]
         brightness = data.get("appliedBrightness")
         message = data["message"]
         updated = data["updatedAt"]
-        if connection not in CONNECTION_STATES or not isinstance(message, str):
+        if (not isinstance(connection, str) or connection not in CONNECTION_STATES
+                or not isinstance(message, str)
+                or len(message) > MAX_MESSAGE_SIZE):
             raise ValueError("invalid runtime status")
         if type(updated) is not int:
             raise ValueError("invalid update time")

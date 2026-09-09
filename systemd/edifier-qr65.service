@@ -4,7 +4,7 @@ After=bluetooth.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/edifier-qr65 daemon
+ExecStart=%h/.local/share/edifier-qr65/current/bin/edifier-qr65 daemon
 Restart=always
 RestartSec=3
 # asyncio.run handles SIGINT by cancelling the BLE context before process exit.
@@ -14,8 +14,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
 ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=-%h/.config/edifier-qr65 -%h/.local/state/edifier-qr65
+ProtectHome=tmpfs
+BindReadOnlyPaths=%h/.local/share/edifier-qr65
+BindPaths=%h/.config/edifier-qr65 %h/.local/state/edifier-qr65
 ProtectClock=true
 ProtectKernelTunables=true
 ProtectKernelModules=true

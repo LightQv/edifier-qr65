@@ -8,7 +8,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from .theme import parse_rgb, read_requested_color
+from .desired import parse_rgb, read_requested_color
 
 CONFIG_VERSION = 1
 DEFAULT_STATIC_COLOR = "#7DAEA3"

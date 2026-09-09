@@ -1,7 +1,7 @@
 import pytest
 
 from edifier_qr65.config import Config, config_file, load_config, save_config
-from edifier_qr65.theme import request_color, state_file
+from edifier_qr65.desired import request_color, state_file
 
 
 def test_default_config_is_created_atomically(xdg_dirs) -> None:

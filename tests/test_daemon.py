@@ -7,7 +7,7 @@ from edifier_qr65 import daemon
 from edifier_qr65.ble import ColorApplicationError
 from edifier_qr65.color import match_rgb
 from edifier_qr65.protocol import AmbientLightState, LightMode
-from edifier_qr65.theme import request_color, state_file
+from edifier_qr65.desired import request_color, state_file
 
 
 class ImmediateEvent:

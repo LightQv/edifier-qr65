@@ -192,7 +192,7 @@ Confirmed behavior:
    analog playback or change PipeWire's analog sink.
 
 This is why the runtime uses a persistent daemon rather than connecting once
-for every Omarchy theme change.
+for every color-source change.
 
 ## Safety Boundary
 

@@ -1,84 +1,223 @@
-# Edifier QR65 Omarchy Theme Sync
+# Edifier QR65 BLE Daemon and CLI
 
-Unofficial Linux BLE control for the Edifier QR65 ambient lights. A user daemon
-holds the QR65 control connection while audio continues over a wired input.
-Dynamic mode follows the active Omarchy theme `accent`; Static mode holds a
-selected color.
+Unofficial Linux control of the Edifier QR65 ambient lights over Bluetooth Low
+Energy (BLE). A persistent systemd user service holds the QR65 control
+connection so lighting can be changed while audio continues over a wired input.
 
-## Confirmed Environment
+This repository is self-contained and Omarchy-independent. External programs
+may use its versioned CLI/JSON API to supply colors, but the daemon does not
+install, update, remove, or otherwise manage those consumers. The
+[Omarchy QR65 plugin](https://github.com/LightQv/omarchy-edifier-qr65) is one
+optional consumer.
+
+## Confirmed Hardware and Software
+
+The implementation and protocol safety boundary were confirmed with:
 
 - Edifier QR65 global model
-- EDIFIER ConneX Android `1.0.30`
+- EDIFIER ConneX Android `1.0.30` (`versionCode 70`)
 - BlueZ through Bleak `3.0.2`
-- Omarchy `4.0.2-1` with PipeWire analog output
-- QR65 lighting array `4`, static mode `7`
+- PipeWire analog output
+- QR65 lighting array `4`, static mode `7`, and protocol V2 without payload
+  encryption
 
-The speaker firmware version was not exposed during testing. Other firmware
-versions may behave differently. The unpublished `EDF QR65` variant is
-intentionally rejected because its lighting array and mode mapping have not
-been verified.
+The speaker firmware version was not exposed during testing, so other firmware
+may behave differently. The unpublished `EDF QR65` variant is intentionally
+rejected because its service, lighting array, and mode mapping have not been
+verified.
 
-## Hardware Constraint
+## Hardware Connection Constraint
 
-The tested QR65 advertises its BLE control service and Edifier manufacturer
-data only while a Bluetooth
-Classic connection is active in Bluetooth input mode. Once BLE is connected,
-the connection survives switching the speaker back to its wired input.
+On the tested QR65, the BLE control service and Edifier manufacturer data are
+advertised only while both conditions are true:
+
+1. The speaker is using Bluetooth input.
+2. A Bluetooth Classic audio connection is active.
+
+After BLE connects, that connection survives switching the speaker back to a
+wired input and does not interrupt analog playback. This constraint is why the
+daemon keeps one persistent GATT session instead of reconnecting for every
+color.
 
 After a speaker power cycle, service restart, or lost BLE connection:
 
-1. Switch the QR65 to Bluetooth input.
-2. Let a previously paired phone connect, with ConneX closed.
-3. Wait for the daemon to connect and apply the current color.
-4. Switch the QR65 back to the wired input.
+1. Close ConneX.
+2. Switch the QR65 to Bluetooth input.
+3. Let a previously paired phone establish its Bluetooth audio connection.
+4. Wait for `edifier-qr65 status` to report `connected`.
+5. Switch the QR65 back to the wired input.
 
-The daemon then remains connected and later theme changes do not interrupt
-wired audio. ConneX and the Linux daemon cannot hold the BLE connection at the
-same time.
+ConneX and the Linux daemon cannot own the QR65 BLE connection simultaneously.
+Use `release` and `resume` for an intentional handoff.
 
-## Installed Components
+## Requirements
+
+- Linux with BlueZ
+- Python 3.12 or newer
+- `python-bleak` available to the system Python
+- systemd user services
+- `python`, `systemctl`, and `sha256sum` on `PATH`
+
+Install `python-bleak` with the operating system's package manager before
+running the installer. The managed virtual environment uses system site
+packages and the installer deliberately does not download runtime dependencies.
+
+## Install, Update, and Uninstall
+
+The scripts in this repository own only the daemon, CLI launcher, and systemd
+unit. Run them from a daemon repository checkout:
+
+```bash
+git clone https://github.com/LightQv/edifier-qr65.git
+cd edifier-qr65
+./install.sh
+```
+
+The installer builds a wheel, installs it into a dedicated virtual environment,
+records ownership checksums, enables the user service, and restarts it. It is
+idempotent and refuses to replace unrelated or locally modified managed files.
+Use `./install.sh --force` only after inspecting the reported conflict.
+
+Update the daemon from the same checkout:
+
+```bash
+git pull --ff-only
+./install.sh
+```
+
+The restart may require the Bluetooth-input activation procedure above.
+
+Uninstall daemon-owned components with:
+
+```bash
+./uninstall.sh
+```
+
+The uninstaller verifies its ownership marker and managed-file checksums before
+removal. It stops and disables the service, then removes the daemon environment,
+launcher, unit, and ownership marker. User configuration and runtime state are
+preserved; remove those directories manually only if their saved values are no
+longer wanted.
+
+## Installed Paths
+
+With the standard XDG locations, installation and runtime use:
 
 ```text
-~/.local/bin/edifier-qr65
-~/.local/share/edifier-qr65/venv/
-~/.config/systemd/user/edifier-qr65.service
-~/.config/omarchy/hooks/theme-set.d/qr65-theme-sync
-~/.config/omarchy/plugins/lightqv.edifier-qr65/
-~/.config/edifier-qr65/config.toml
-~/.local/state/edifier-qr65/color
-~/.local/state/edifier-qr65/request.json
-~/.local/state/edifier-qr65/status.json
-~/.local/state/edifier-qr65/operation.lock
+~/.local/bin/edifier-qr65                         CLI symlink
+~/.local/share/edifier-qr65/releases/             immutable Python environments
+~/.local/share/edifier-qr65/current               active release symlink
+~/.local/share/edifier-qr65/install-state         ownership/checksum marker
+~/.config/systemd/user/edifier-qr65.service       managed user unit
+~/.config/edifier-qr65/config.toml                 persistent settings
+~/.local/state/edifier-qr65/request.json           authoritative desired color
+~/.local/state/edifier-qr65/color                  legacy compatibility mirror
+~/.local/state/edifier-qr65/status.json            daemon heartbeat/status
+~/.local/state/edifier-qr65/operation.lock         queued-operation lock
+~/.local/state/edifier-qr65/ble.lock               BLE ownership lock
+~/.local/state/edifier-qr65/control.lock           lifecycle-operation lock
 ```
 
-The command points to a dedicated virtual environment outside the plugin Git
-checkout. The systemd unit and theme hook are installed as physical files.
+Lock and state files are created on demand. Custom XDG data, config, and state
+locations are rejected because the supplied systemd unit binds only these
+standard managed paths into its private home namespace.
 
-## Usage
+## Service Use
 
-Select Dynamic mode and immediately resolve the current theme accent:
+The installer enables and starts `edifier-qr65.service`. Manage and inspect it
+with normal user-service commands:
 
 ```bash
-edifier-qr65 mode dynamic
+systemctl --user status edifier-qr65
+systemctl --user restart edifier-qr65
+journalctl --user -u edifier-qr65 -f
 ```
 
-Select Static mode, persist its fallback color, and queue it:
+Typical log messages include `connected; switch the QR65 to wired input when
+ready` and `applied #89B4FA at 50% for requested #89B4FA`. If status remains
+`activation-required`, repeat the Bluetooth-input activation procedure.
+
+The unit hides the home directory except for a read-only bind of its managed
+environment and writable binds for its configuration and state paths. The
+system is read-only and the process cannot gain new privileges.
+
+## CLI Lighting Controls
+
+Every color argument is a strict six-digit `#RRGGBB` value. Quote it in a shell
+because `#` otherwise begins a comment.
+
+### Dynamic mode
+
+Dynamic mode is externally driven. Selecting it **requires an explicit color**;
+the daemon does not discover a desktop theme or choose a color source:
 
 ```bash
-edifier-qr65 mode static '#89B4FA'
+edifier-qr65 mode dynamic '#89B4FA'
 ```
 
-Reapply the desired color for the configured mode and inspect queued versus
-daemon-reported state:
+This atomically persists Dynamic mode and queues the supplied color. A consumer
+must issue the command again whenever its source color changes.
+
+### Static mode
+
+Static mode persists and queues its own fixed color:
+
+```bash
+edifier-qr65 mode static '#FFB86C'
+```
+
+### Sync and direct queueing
+
+Requeue the configured static color, or the most recently requested Dynamic
+color, without changing modes:
 
 ```bash
 edifier-qr65 sync
-edifier-qr65 status
-edifier-qr65 status --json
 ```
 
-Temporarily release the speaker's single BLE control connection to Edifier
-ConneX, then resume the daemon after fully closing the app:
+`request.json` is authoritative desired state. Configuration and request writes
+share an advisory lock so concurrent consumers cannot split a mode change from
+its color. The lower-level compatibility command queues a color without changing
+the configured mode:
+
+```bash
+edifier-qr65 set-color '#89B4FA'
+```
+
+### Brightness
+
+Set persistent brightness from 0 through 100 percent:
+
+```bash
+edifier-qr65 brightness 50
+```
+
+Until brightness is explicitly configured, the daemon preserves the static-mode
+brightness read from the speaker. Each change uses the static-light packet and
+is confirmed by a post-write lighting-state query.
+
+### Color matching
+
+Literal RGB output is the default. Toggle the optional built-in matching profile
+with:
+
+```bash
+edifier-qr65 color-matching on
+edifier-qr65 color-matching off
+```
+
+With matching enabled, `requestedColor` remains the consumer's display target
+while `appliedColor` reports the transformed RGB confirmed on the QR65. The
+profile uses 28 subjective chromatic target-to-ConneX observations collected at
+50% brightness. Four neutral observations were excluded because the tested
+speaker retained a blue cast; neutral RGB is therefore preserved by design.
+The fitted profile maps `#E68E0D` to approximately `#FD3600`. It is specific to
+the tested unit and viewing conditions, so literal RGB remains the safe default.
+
+### Release and resume
+
+Temporarily hand the single BLE connection to ConneX, then reclaim it after
+fully closing the app:
 
 ```bash
 edifier-qr65 release
@@ -86,95 +225,92 @@ edifier-qr65 release
 edifier-qr65 resume
 ```
 
-`release` stops the user service cleanly and preserves a non-expiring handoff
-status. `resume` starts the service without changing the configured mode or
-requested color. The normal Bluetooth-input activation flow may be required
-before Linux can reclaim BLE.
+`release` cleanly stops only the QR65 user service and writes a non-expiring
+`released` status. `resume` starts only that service; it does not alter mode,
+brightness, matching, or requested color. Reclaiming BLE may require the normal
+Bluetooth-input activation flow.
 
-Set persistent LED brightness or return to literal RGB output:
+## Versioned Consumer API v1
 
-```bash
-edifier-qr65 brightness 50
-edifier-qr65 color-matching off
-edifier-qr65 color-matching on
-```
-
-Until brightness is explicitly set, the daemon preserves the value read from
-the speaker. Brightness changes are applied through the existing static-light
-packet and confirmed by post-write device readback.
-
-Dynamic mode queues the validated theme accent. If bounded accent resolution
-fails, it temporarily queues the configured static color while preserving
-Dynamic mode so a later theme change recovers automatically. Theme hooks are a
-successful no-op in Static mode.
-
-Queued commands use an advisory process lock so mode configuration and its
-desired-color request cannot interleave. `request.json` is the authoritative
-desired state; the plain `color` file is maintained only for compatibility with
-daemon processes that loaded the older backend.
-
-The legacy direct queue remains available for compatibility:
+External integrations should first query the API contract:
 
 ```bash
-edifier-qr65 set-color '#89B4FA'
+edifier-qr65 api-version
+edifier-qr65 api-version --json
 ```
 
-Queue the current Omarchy accent:
+The JSON form is compact and has these exact keys:
+
+```json
+{"apiVersion":1,"daemonVersion":"0.1.0","statusVersion":1}
+```
+
+Consumer API version `1` consists of the explicit-color control commands
+documented above and the status schema below. Consumers should reject an
+unsupported `apiVersion` or `statusVersion` rather than inferring compatibility
+from `daemonVersion`.
+
+Read state without BLE discovery or writes:
 
 ```bash
-edifier-qr65 theme-sync
+edifier-qr65 status
+edifier-qr65 status --json
 ```
 
-`theme-sync` follows Dynamic fallback rules and is a no-op in Static mode.
-`status --json` does not perform Bluetooth discovery or writes. Its stable keys
-are `version`, `mode`, `configuredStaticColor`, `configuredBrightness`,
-`colorMatching`, `requestedColor`, `requestedSource`, `appliedColor`,
-`appliedBrightness`, `connection`, `message`, and `updatedAt`. The new fields
-are additive to schema version `1`; older runtime files remain valid.
-Runtime connection values are `starting`, `scanning`, `activation-required`,
-`connecting`, `connected`, `released`, and `error`; a heartbeat older than 15
-seconds is reported as `error` rather than falsely claiming a live connection.
-The explicit `released` handoff state does not expire while the daemon is
-stopped.
-`requestedColor` is the display target. `appliedColor` is the actual QR65 RGB
-command confirmed by a post-write lighting-state query, so the values differ
-while color matching is enabled. Before each write, the daemon also queries the
-live state to verify the held GATT session and either preserve or update the
-speaker's static-mode brightness.
-If a write cannot be confirmed, the daemon blocks that request rather than
-repeating hardware writes indefinitely. Change a control or use Reapply Color
-to issue a new request.
-The QR65 LEDs do not visually match a color-managed display for every literal
-RGB value. The optional matching profile uses 28 chromatic target-to-ConneX
-measurements collected at 50% brightness; four neutral observations were
-excluded because the QR65 retained a blue cast at every attempted command. Its
-regularized hue-specific model preserves literal neutral RGB by design and maps
-`#E68E0D` to approximately `#FD3600`. Literal RGB remains the default until the
-fitted profile has passed live visual A/B testing. See `PROTOCOL.md` for the
-confirmed ConneX/daemon comparison and profile limitations.
+Status schema version `1` always returns exactly these fields:
 
-To collect a display-to-light profile, open `calibration/index.html` in a
-color-managed browser and follow `calibration/README.md`. The page records 24
-fitting colors and eight withheld validation colors at 50% brightness, saves
-progress locally, and exports the target-to-ConneX measurements as JSON. Keep
-color matching disabled while collecting measurements.
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `version` | integer | Status schema version; currently `1`. |
+| `mode` | `"dynamic"` or `"static"` | Persisted lighting mode. |
+| `configuredStaticColor` | string | Persisted uppercase `#RRGGBB` static color. |
+| `configuredBrightness` | integer or `null` | Configured `0..100`; `null` preserves device brightness. |
+| `colorMatching` | boolean | Whether the built-in matching transform is enabled. |
+| `requestedColor` | string or `null` | Latest queued uppercase `#RRGGBB` display target. |
+| `requestedSource` | string | Request provenance, normally `dynamic`, `static`, or `direct`; empty only for migrated legacy state or no request. |
+| `appliedColor` | string or `null` | RGB command confirmed by device readback. |
+| `appliedBrightness` | integer or `null` | Device-confirmed `0..100`, or unknown. |
+| `connection` | string | One of the connection states listed below. |
+| `message` | string | Operational or diagnostic detail; may be empty. |
+| `updatedAt` | integer | Unix timestamp in seconds for the daemon status update, or `0` when unavailable. |
 
-## Omarchy Plugin
+An example connected response is:
 
-The top-bar widget is placed immediately before the Bluetooth widget. Open it
-by clicking its glow icon or pressing `SUPER+CTRL+G`.
+```json
+{"version":1,"mode":"dynamic","configuredStaticColor":"#7DAEA3","configuredBrightness":null,"colorMatching":false,"requestedColor":"#89B4FA","requestedSource":"dynamic","appliedColor":"#89B4FA","appliedBrightness":50,"connection":"connected","message":"","updatedAt":1788940800}
+```
 
-The native-style panel provides Follow Theme and Static Color modes, eight
-preset colors, validated hexadecimal input, brightness, screen matching, and
-recovery guidance. The hero switch controls daemon ownership: on gives BLE to
-the daemon; off releases it for ConneX. It supports arrows or `h/j/k/l`, Enter
-or Space, `/` for the hex editor while in Static Color mode, Escape to close,
-and Tab or Shift+Tab to move between neighboring bar panels.
+Exact `connection` states are:
 
-The repository root is the plugin source. `omarchy plugin add` clones it under
-`~/.config/omarchy/plugins/lightqv.edifier-qr65/`.
+- `starting`: daemon initialization has begun.
+- `scanning`: searching for the verified QR65 advertisement.
+- `activation-required`: no single verified advertisement is available; use
+  the Bluetooth-input activation flow.
+- `connecting`: opening and validating the GATT session.
+- `connected`: the session is live and its heartbeat is current.
+- `released`: the daemon was intentionally stopped for BLE handoff; this state
+  does not expire.
+- `error`: status is unavailable, malformed, stale, future-dated, or the daemon
+  reported a control/application failure.
 
-Inspect discovery and current lighting state while ConneX is closed:
+All states except `released` become `error` when their heartbeat is more than 60
+seconds old. A timestamp over five seconds in the future also becomes `error`.
+If a write cannot be confirmed, the daemon blocks that exact request rather than
+repeating hardware writes indefinitely. Change a control or run `sync` to issue
+a new request.
+
+## Diagnostics and One-Shot Operations
+
+Start with status and service logs:
+
+```bash
+edifier-qr65 status --json
+systemctl --user status edifier-qr65
+journalctl --user -u edifier-qr65 --since today
+```
+
+For discovery or GATT inspection, release the daemon, close ConneX, activate BLE
+advertising as described above, and run:
 
 ```bash
 edifier-qr65 scan
@@ -182,113 +318,106 @@ edifier-qr65 inspect
 edifier-qr65 query-light
 ```
 
-Generate a packet without Bluetooth activity:
+`scan --all` includes unrelated BLE devices. `inspect` lists services and
+characteristics without writing. `query-light` reads the support and ambient
+lighting state without changing it. Both connection commands accept `--device`
+and `--timeout`.
+
+Generate the allowlisted static packet without Bluetooth activity:
 
 ```bash
 edifier-qr65 set-color '#123456' --dry-run
 ```
 
-Perform a direct one-shot write only when the daemon is stopped and BLE is
-advertising:
+Perform a direct one-shot write only while the daemon is stopped or released
+and BLE is advertising:
 
 ```bash
-systemctl --user stop edifier-qr65
+edifier-qr65 release
 edifier-qr65 set-color '#123456' --direct
-systemctl --user start edifier-qr65
+edifier-qr65 resume
 ```
 
-Supplying `--device` never bypasses this gate. Direct writes first verify the
-tested global-model GATT service and query array `4` with static mode `7`.
-They are refused while the QR65 user service is active.
+Supplying `--device` does not bypass the direct-write gate. Direct writes first
+verify the tested global-model GATT service and query array `4`, static mode `7`.
 
-## Service
+## Calibration
+
+To collect a display-to-light profile, open `calibration/index.html` in a
+color-managed browser and follow [`calibration/README.md`](calibration/README.md).
+The page presents 24 fitting colors and eight withheld validation colors,
+stores progress locally, and exports target-to-ConneX measurements as JSON.
+
+Keep display conditions fixed, release BLE to ConneX, set static lighting to
+exactly 50% brightness, and disable daemon color matching while measuring. To
+reproduce the fitted coefficients and held-out metrics:
 
 ```bash
-systemctl --user status edifier-qr65
-journalctl --user -u edifier-qr65 -f
-systemctl --user restart edifier-qr65
+python -m pip install '.[calibration]'
+python calibration/fit.py
 ```
 
-Normal log messages include:
+NumPy is needed only for calibration fitting, not daemon operation.
+
+## Migration from the Old Combined Installation
+
+Running this repository's `./install.sh` over an installation made by the old
+combined daemon/plugin repository performs an adoption when the existing marker
+has owner `lightqv.edifier-qr65`. Before changing anything, it verifies the
+recorded checksums of the existing systemd unit and old
+`~/.config/omarchy/hooks/theme-set.d/qr65-theme-sync` hook. It then:
+
+1. Reuses and updates the daemon virtual environment and launcher.
+2. Installs the standalone service unit.
+3. Removes the verified legacy theme hook.
+4. Rewrites the marker with owner `edifier-qr65`.
+5. Enables and restarts the standalone daemon.
+
+If a recorded legacy file was modified or is unrecognized, adoption stops
+without replacing it; inspect the file before considering `--force`. Adoption
+does not modify or remove any plugin checkout, widget, shell configuration, or
+optional consumer. Manage those separately in their own repository.
+
+Existing `config.toml`, `request.json`, status, and color state remain in place.
+On first use without a configuration file, a valid legacy plain `color` value is
+adopted as the initial static fallback. New readers prefer `request.json`; the
+plain `color` file remains only as a compatibility mirror for older daemon
+processes during migration.
+
+## Safety
+
+The implementation transmits only the captured and verified operations:
 
 ```text
-connected; switch the QR65 to wired input when ready
-applied #89B4FA
+0xD8  support-function query
+0x6A  ambient-light query
+0x6B  array-4, mode-7 static RGB write
 ```
 
-When the service is scanning but cannot connect, briefly use the Bluetooth-mode
-procedure described above.
+The CLI does not expose raw packet writes, command probing, unsupported lighting
+modes, input selection, power, reset, charging, volume, OTA, or firmware
+operations. Writes are preceded and followed by live-state queries to validate
+the held session, preserve or set brightness, and confirm the resulting RGB.
+See [`PROTOCOL.md`](PROTOCOL.md) for sanitized protocol evidence and known
+limitations.
 
-## Development
+## Development Checks
 
-Runtime dependencies are Python 3.12 or newer, BlueZ, `python-bleak`, systemd
-user services, Omarchy Quattro, and Quickshell. NumPy is required only to refit
-the optional calibration profile and can be installed with
-`pip install '.[calibration]'` in a development environment.
-The service uses the standard `~/.config` and `~/.local/state` locations for
-its sandboxed writable directories.
-
-Run checks with:
+Install test dependencies in a development environment, then run:
 
 ```bash
 python -m pytest -q
 python -m compileall -q src tests
-bash -n hooks/qr65-theme-sync
 bash -n install.sh uninstall.sh
+shellcheck install.sh uninstall.sh
 systemd-analyze --user verify systemd/edifier-qr65.service
-omarchy plugin validate .
+python -m build
 ```
 
-## Installation
-
-Install the external BLE dependency, add the Git repository as an Omarchy
-plugin, then install its backend:
-
-```bash
-omarchy pkg add python-bleak
-omarchy plugin add https://github.com/LightQv/omarchy-edifier-qr65.git --yes
-cd "$HOME/.config/omarchy/plugins/lightqv.edifier-qr65"
-./install.sh
-edifier-qr65 mode dynamic
-```
-
-The installer is idempotent. It refuses to replace unrelated command, service,
-or hook files unless `--force` is explicitly supplied. It does not modify
-Hyprland configuration. To add the optional `SUPER+CTRL+G` shortcut, add this
-line to `~/.config/hypr/bindings.lua`:
-
-```lua
-o.bind("SUPER + CTRL + G", "QR65 glow", "omarchy-shell shell toggle lightqv.edifier-qr65")
-```
-
-After `omarchy plugin update lightqv.edifier-qr65`, rerun `./install.sh` to
-refresh the backend, service, and hook. A daemon restart can require the normal
-Bluetooth activation cycle.
-
-## Uninstall
-
-```bash
-cd "$HOME/.config/omarchy/plugins/lightqv.edifier-qr65"
-./uninstall.sh
-cd
-omarchy plugin remove lightqv.edifier-qr65
-```
-
-Remove the `SUPER+CTRL+G` QR65 binding from `~/.config/hypr/bindings.lua` when
-uninstalling the plugin.
-
-The uninstaller preserves `~/.config/edifier-qr65` and
-`~/.local/state/edifier-qr65`. Remove those separately only if the saved
-lighting settings and state are no longer needed.
-
-## Safety
-
-Only the captured support query (`0xD8`), ambient-light query (`0x6A`), and
-array-4 static-color set (`0x6B`) are transmitted. The CLI does not expose raw
-packet writes, firmware operations, power controls, or command probing.
-
-See `PROTOCOL.md` for sanitized protocol evidence and known limitations.
+The systemd verification expects the managed environment's daemon executable to
+exist; CI uses a temporary executable at that path. NumPy is required only for refitting the
+calibration profile with `python calibration/fit.py`.
 
 ## License
 
-This project is available under the MIT License. See `LICENSE`.
+This project is available under the MIT License. See [`LICENSE`](LICENSE).

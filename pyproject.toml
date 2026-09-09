@@ -12,7 +12,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "LightQv" }]
 requires-python = ">=3.12"
 dependencies = ["bleak>=3.0,<4"]
-keywords = ["edifier", "qr65", "bluetooth", "omarchy", "quickshell"]
+keywords = ["edifier", "qr65", "bluetooth", "ble", "lighting"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
@@ -27,9 +27,9 @@ test = ["pytest>=8,<10"]
 calibration = ["numpy>=2,<3"]
 
 [project.urls]
-Homepage = "https://github.com/LightQv/omarchy-edifier-qr65"
-Repository = "https://github.com/LightQv/omarchy-edifier-qr65"
-Issues = "https://github.com/LightQv/omarchy-edifier-qr65/issues"
+Homepage = "https://github.com/LightQv/edifier-qr65"
+Repository = "https://github.com/LightQv/edifier-qr65"
+Issues = "https://github.com/LightQv/edifier-qr65/issues"
 
 [project.scripts]
 edifier-qr65 = "edifier_qr65.cli:main"

@@ -13,7 +13,7 @@ from edifier_qr65.status import (
     status_file,
     write_runtime_status,
 )
-from edifier_qr65.theme import request_color
+from edifier_qr65.desired import request_color
 
 
 def test_runtime_status_write_is_atomic(xdg_dirs) -> None:
@@ -26,12 +26,12 @@ def test_runtime_status_write_is_atomic(xdg_dirs) -> None:
 
 
 def test_status_combines_stable_camel_case_fields(xdg_dirs) -> None:
-    request_color("#89B4FA", "theme-accent")
+    request_color("#89B4FA", "dynamic")
     write_runtime_status("connected", "#89B4FA", now=100)
     assert build_status(Config(), now=100) == {
         "version": 1, "mode": "dynamic", "configuredStaticColor": "#7DAEA3",
         "configuredBrightness": None, "colorMatching": False,
-        "requestedColor": "#89B4FA", "requestedSource": "theme-accent",
+        "requestedColor": "#89B4FA", "requestedSource": "dynamic",
         "appliedColor": "#89B4FA", "appliedBrightness": None,
         "connection": "connected", "message": "",
         "updatedAt": 100,
@@ -97,6 +97,8 @@ def test_runtime_status_rejects_invalid_values_without_replacing_file(xdg_dirs) 
         write_runtime_status("connected", "bad", now=101)
     with pytest.raises(ValueError):
         write_runtime_status("connected", applied_brightness=101, now=101)
+    with pytest.raises(ValueError):
+        write_runtime_status("connected", applied_brightness=True, now=101)
     assert status_file().read_bytes() == original
 
 
@@ -127,8 +129,8 @@ def test_composed_status_detects_legacy_daemon_connection(
     assert result["updatedAt"] == 100
     assert "next daemon restart" in result["message"]
     assert calls == [
-        ["bluetoothctl", "devices", "Connected"],
-        ["bluetoothctl", "info", "AA:BB:CC:DD:EE:FF"],
+        ["/usr/bin/bluetoothctl", "devices", "Connected"],
+        ["/usr/bin/bluetoothctl", "info", "AA:BB:CC:DD:EE:FF"],
     ]
 
 
@@ -168,3 +170,26 @@ def test_versioned_status_never_uses_legacy_fallback(
 
     assert result["connection"] == "error"
     assert result["message"] in {"Daemon status is stale", "Daemon status unavailable"}
+
+
+def test_runtime_status_rejects_oversized_message(xdg_dirs) -> None:
+    with pytest.raises(ValueError, match="at most 2048"):
+        write_runtime_status("error", message="x" * 2049)
+
+
+def test_boolean_status_version_is_rejected(xdg_dirs) -> None:
+    status_file().parent.mkdir(parents=True)
+    status_file().write_text(
+        '{"version":true,"connection":"connected","appliedColor":null,'
+        '"message":"","updatedAt":100}'
+    )
+    assert read_runtime_status(now=100)["connection"] == "error"
+
+
+def test_unhashable_connection_is_rejected(xdg_dirs) -> None:
+    status_file().parent.mkdir(parents=True)
+    status_file().write_text(
+        '{"version":1,"connection":[],"appliedColor":null,'
+        '"message":"","updatedAt":100}'
+    )
+    assert read_runtime_status(now=100)["connection"] == "error"

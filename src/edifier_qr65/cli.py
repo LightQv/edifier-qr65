@@ -15,12 +15,12 @@ from contextlib import contextmanager
 
 from bleak.exc import BleakError
 
-from . import daemon
+from . import __version__, daemon
 from .ble import EDIFIER_MANUFACTURER_ID, discover, inspect, query_ambient_light, set_static_color
 from .config import load_config
 from .protocol import decode_ambient_light, encode_static_color
 from .status import build_status, read_runtime_status, status_file, write_runtime_status
-from .theme import (
+from .desired import (
     parse_rgb,
     request_color,
     ownership_lock,
@@ -36,7 +36,7 @@ SERVICE_UNIT = "edifier-qr65.service"
 
 @contextmanager
 def _control_lock() -> Iterator[None]:
-    """Serialize daemon lifecycle operations without blocking theme updates."""
+    """Serialize daemon lifecycle operations without blocking color updates."""
     path = status_file().with_name("control.lock")
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a+b") as lock:
@@ -70,10 +70,11 @@ def _parser() -> argparse.ArgumentParser:
     color.add_argument("--delay", type=float, default=0, help=argparse.SUPPRESS)
     color.add_argument("--dry-run", action="store_true", help="print a 50%% brightness packet without BLE")
 
-    commands.add_parser("theme-sync", help="queue the current Omarchy accent for the daemon")
-    mode = commands.add_parser("mode", help="select dynamic or static lighting")
+    api_version = commands.add_parser("api-version", help="show the stable consumer API version")
+    api_version.add_argument("--json", action="store_true", dest="as_json")
+    mode = commands.add_parser("mode", help="select externally driven dynamic or static lighting")
     mode.add_argument("mode", choices=("dynamic", "static"))
-    mode.add_argument("color", nargs="?", help="required #RRGGBB color for static mode")
+    mode.add_argument("color", help="color in #RRGGBB format")
     commands.add_parser("sync", help="reapply the desired configured color")
     brightness = commands.add_parser("brightness", help="set persistent LED brightness")
     brightness.add_argument("percent", type=int)
@@ -83,7 +84,7 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser("resume", help="resume the persistent BLE daemon")
     status = commands.add_parser("status", help="show configured and daemon-reported state")
     status.add_argument("--json", action="store_true", dest="as_json")
-    commands.add_parser("daemon", help="hold BLE and apply queued theme colors")
+    commands.add_parser("daemon", help="hold BLE and apply queued colors")
     return parser
 
 
@@ -101,7 +102,7 @@ def _nonnegative_float(value: float, name: str) -> float:
 
 def _daemon_is_active() -> bool:
     result = subprocess.run(
-        ["systemctl", "--user", "is-active", "--quiet", SERVICE_UNIT],
+        ["/usr/bin/systemctl", "--user", "is-active", "--quiet", SERVICE_UNIT],
         check=False,
         capture_output=True,
         timeout=5,
@@ -131,34 +132,36 @@ async def _scan(timeout: float, include_all: bool) -> int:
 
 async def _inspect(address: str | None, timeout: float) -> int:
     timeout = _positive_float(timeout, "timeout")
-    device = address
-    if address is None:
-        devices = await discover(timeout)
-        if len(devices) != 1:
-            print(f"Expected one QR65 advertisement, found {len(devices)}.")
-            return 1
-        device = devices[0].device
+    with ownership_lock(blocking=False):
+        device = address
+        if address is None:
+            devices = await discover(timeout)
+            if len(devices) != 1:
+                print(f"Expected one QR65 advertisement, found {len(devices)}.")
+                return 1
+            device = devices[0].device
 
-    assert device is not None
-    for service_uuid, characteristics in await inspect(device, timeout):
-        print(service_uuid)
-        for characteristic in characteristics:
-            print(f"  {characteristic}")
+        assert device is not None
+        for service_uuid, characteristics in await inspect(device, timeout):
+            print(service_uuid)
+            for characteristic in characteristics:
+                print(f"  {characteristic}")
     return 0
 
 
 async def _query_light(address: str | None, timeout: float) -> int:
     timeout = _positive_float(timeout, "timeout")
-    device = address
-    if address is None:
-        devices = await discover(timeout)
-        if len(devices) != 1:
-            print(f"Expected one QR65 advertisement, found {len(devices)}.")
-            return 1
-        device = devices[0].device
+    with ownership_lock(blocking=False):
+        device = address
+        if address is None:
+            devices = await discover(timeout)
+            if len(devices) != 1:
+                print(f"Expected one QR65 advertisement, found {len(devices)}.")
+                return 1
+            device = devices[0].device
 
-    assert device is not None
-    support, ambient = await query_ambient_light(device, timeout)
+        assert device is not None
+        support, ambient = await query_ambient_light(device, timeout)
     state = decode_ambient_light(ambient)
     print(f"support 0xD8: {support.payload.hex(' ')}")
     print(f"array: {state.array_index}; selected mode: {state.selected_mode}")
@@ -217,7 +220,7 @@ def _control_daemon(action: str) -> None:
     with _control_lock():
         if action == "stop":
             subprocess.run(
-                ["systemctl", "--user", "stop", SERVICE_UNIT],
+                ["/usr/bin/systemctl", "--user", "stop", SERVICE_UNIT],
                 check=True, capture_output=True, text=True, timeout=15,
             )
             runtime = read_runtime_status()
@@ -230,7 +233,7 @@ def _control_daemon(action: str) -> None:
             return
         was_released = read_runtime_status()["connection"] == "released"
         subprocess.run(
-            ["systemctl", "--user", "start", SERVICE_UNIT],
+            ["/usr/bin/systemctl", "--user", "start", SERVICE_UNIT],
             check=True, capture_output=True, text=True, timeout=15,
         )
         if was_released:
@@ -263,30 +266,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                     args.direct,
                 )
             )
-        if args.command == "theme-sync":
-            result = sync_desired(theme_hook=True)
-            if not result.queued:
-                print("Static mode; theme sync ignored")
+        if args.command == "api-version":
+            value = {"apiVersion": 1, "daemonVersion": __version__, "statusVersion": 1}
+            if args.as_json:
+                print(json.dumps(value, separators=(",", ":")))
             else:
-                print(f"Queued {result.color}")
+                print(f"Consumer API: {value['apiVersion']}")
+                print(f"Daemon: {value['daemonVersion']}")
+                print(f"Status schema: {value['statusVersion']}")
             return 0
         if args.command == "mode":
             if args.mode == "dynamic":
-                if args.color is not None:
-                    raise ValueError("dynamic mode does not accept a color")
-                result = set_dynamic_mode()
-                suffix = " (static fallback; dynamic mode preserved)" if result.source == "static-fallback" else ""
-                print(f"Mode dynamic; queued {result.color}{suffix}")
+                result = set_dynamic_mode(args.color)
+                print(f"Mode dynamic; queued {result.color}")
             else:
-                if args.color is None:
-                    raise ValueError("static mode requires a #RRGGBB color")
                 normalized = set_static_mode(args.color)
                 print(f"Mode static; queued {normalized}")
             return 0
         if args.command == "sync":
             result = sync_desired()
-            suffix = " (static fallback; dynamic mode preserved)" if result.source == "static-fallback" else ""
-            print(f"Queued {result.color}{suffix}")
+            print(f"Queued {result.color}")
             return 0
         if args.command == "brightness":
             value = set_brightness(args.percent)

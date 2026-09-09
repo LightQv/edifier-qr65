@@ -1,4 +1,4 @@
-"""Omarchy accent-color state shared by the hook and daemon."""
+"""Persistent desired-color state shared by the CLI and daemon."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import fcntl
 import json
 import os
 import re
-import subprocess
 import tempfile
 import time
 from contextlib import contextmanager
@@ -17,6 +16,7 @@ from typing import Iterator
 RGB_PATTERN = re.compile(r"#[0-9A-Fa-f]{6}\Z")
 REQUEST_VERSION = 1
 MAX_REQUEST_SIZE = 64 * 1024
+MAX_SOURCE_SIZE = 128
 
 
 def state_file() -> Path:
@@ -67,9 +67,11 @@ class Request:
 def _read_legacy_request() -> Request | None:
     path = state_file()
     try:
-        if path.stat().st_size > 64:
+        with path.open("rb") as source:
+            raw = source.read(65)
+        if len(raw) > 64:
             raise ValueError("legacy color file is too large")
-        color = path.read_text(encoding="ascii").strip().upper()
+        color = raw.decode("ascii").strip().upper()
         parse_rgb(color)
         return Request(color, "", int(path.stat().st_mtime))
     except FileNotFoundError:
@@ -80,9 +82,11 @@ def read_request() -> Request | None:
     """Read request.json, using plain color only when request.json is absent."""
     path = request_file()
     try:
-        if path.stat().st_size > MAX_REQUEST_SIZE:
+        with path.open("rb") as source:
+            raw = source.read(MAX_REQUEST_SIZE + 1)
+        if len(raw) > MAX_REQUEST_SIZE:
             raise ValueError("request file is too large")
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(raw.decode("utf-8"))
     except FileNotFoundError:
         return _read_legacy_request()
     except json.JSONDecodeError as error:
@@ -99,8 +103,8 @@ def read_request() -> Request | None:
     if not isinstance(color, str):
         raise ValueError("request color must use #RRGGBB format")
     parse_rgb(color)
-    if not isinstance(source, str) or not source:
-        raise ValueError("request source must be a non-empty string")
+    if not isinstance(source, str) or not source or len(source) > MAX_SOURCE_SIZE:
+        raise ValueError(f"request source must be 1..{MAX_SOURCE_SIZE} characters")
     if type(updated_at) is not int:
         raise ValueError("request updatedAt must be an integer")
     return Request(color.strip().upper(), source, updated_at)
@@ -155,8 +159,8 @@ def ownership_lock(*, blocking: bool = True) -> Iterator[None]:
 
 def _request_color(value: str, source: str = "direct") -> tuple[int, int, int]:
     color = parse_rgb(value)
-    if not isinstance(source, str) or not source:
-        raise ValueError("request source must be a non-empty string")
+    if not isinstance(source, str) or not source or len(source) > MAX_SOURCE_SIZE:
+        raise ValueError(f"request source must be 1..{MAX_SOURCE_SIZE} characters")
     normalized = value.strip().upper()
     try:
         previous = read_request()
@@ -186,57 +190,43 @@ def request_color(value: str, source: str = "direct") -> tuple[int, int, int]:
 
 @dataclass(frozen=True)
 class SyncResult:
-    """Outcome of resolving and optionally queueing a desired color."""
+    """Outcome of queueing the configured desired color."""
 
     color: str
     source: str
-    queued: bool = True
 
 
-def _resolve_accent() -> str:
-    result = subprocess.run(
-        ["omarchy", "theme", "color", "accent"], check=True, capture_output=True,
-        text=True, timeout=3,
-    )
-    accent = result.stdout.strip()
-    parse_rgb(accent)
-    return accent.upper()
-
-
-def _sync_desired(theme_hook: bool = False) -> SyncResult:
+def _sync_desired() -> SyncResult:
     from .config import load_config
 
     config = load_config()
     if config.mode == "static":
-        if theme_hook:
-            return SyncResult(config.static_color, "static", queued=False)
         _request_color(config.static_color, "static")
         return SyncResult(config.static_color, "static")
-
-    try:
-        accent = _resolve_accent()
-    except (OSError, subprocess.SubprocessError, UnicodeError, ValueError):
-        parse_rgb(config.static_color)
-        _request_color(config.static_color, "static-fallback")
-        return SyncResult(config.static_color, "static-fallback")
-    _request_color(accent, "theme-accent")
-    return SyncResult(accent, "theme-accent")
+    request = read_request()
+    if request is None:
+        raise ValueError("dynamic mode has no requested color")
+    _request_color(request.color, "dynamic")
+    return SyncResult(request.color, "dynamic")
 
 
-def sync_desired(*, theme_hook: bool = False) -> SyncResult:
+def sync_desired() -> SyncResult:
     """Atomically select and queue the configured desired color."""
     with operation_lock():
-        return _sync_desired(theme_hook)
+        return _sync_desired()
 
 
-def set_dynamic_mode() -> SyncResult:
-    """Persist dynamic mode and queue its resolved request without interleaving."""
+def set_dynamic_mode(value: str) -> SyncResult:
+    """Persist dynamic mode and queue an external color without interleaving."""
     from .config import load_config, save_config
 
+    parse_rgb(value)
+    normalized = value.strip().upper()
     with operation_lock():
         config = load_config()
         save_config(replace(config, mode="dynamic"))
-        return _sync_desired()
+        _request_color(normalized, "dynamic")
+    return SyncResult(normalized, "dynamic")
 
 
 def set_static_mode(value: str) -> str:
@@ -271,8 +261,3 @@ def set_color_matching(enabled: bool) -> bool:
     with operation_lock():
         save_config(replace(load_config(), color_matching=enabled))
     return enabled
-
-
-def sync_omarchy_accent() -> str:
-    """Compatibility entry point used by the installed Omarchy theme hook."""
-    return sync_desired(theme_hook=True).color
