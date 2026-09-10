@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "profile": "second-pass-candidate-1",
+  "conditions": {"speakerBrightness": 50, "monitorBrightness": 75, "nightLight": false},
+  "white": "#FFE080",
+  "hues": [
+    {"target": "#FF0000", "command": "#FF0000", "quality": "good"},
+    {"target": "#00FFFF", "command": "#00FF4E", "quality": "closest"},
+    {"target": "#FFFF00", "command": "#FFB200", "quality": "closest"},
+    {"target": "#8000FF", "command": "#8000FF", "quality": "good"},
+    {"target": "#00FF00", "command": "#1EFF00", "quality": "closest"},
+    {"target": "#FF0080", "command": "#FF0115", "quality": "closest"},
+    {"target": "#FF8000", "command": "#FF2901", "quality": "closest"},
+    {"target": "#0000FF", "command": "#0000FF", "quality": "good"},
+    {"target": "#00FF80", "command": "#00FF16", "quality": "closest"},
+    {"target": "#FF00FF", "command": "#FF015B", "quality": "closest"},
+    {"target": "#80FF00", "command": "#80FF00", "quality": "good"},
+    {"target": "#0080FF", "command": "#0080FF", "quality": "good"}
+  ],
+  "repeats": [
+    {"target": "#FF0000", "command": "#FF0000", "quality": "good"},
+    {"target": "#00FF00", "command": "#00FF00", "quality": "good"},
+    {"target": "#0000FF", "command": "#0000FF", "quality": "good"}
+  ],
+  "pastels": [
+    {"target": "#CBA6F7", "command": "#C244C0", "quality": "good"},
+    {"target": "#A6E3A1", "command": "#7FE047", "quality": "good-enough"},
+    {"target": "#FAB387", "command": "#FF6414", "quality": "good"}
+  ]
+}

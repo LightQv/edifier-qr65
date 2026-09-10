@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QR65 — Saturated hue pass</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; background: #181818; color: #eee; }
+    body { max-width: 1000px; margin: auto; padding: 24px; }
+    h1 { font-size: 1.8rem; }
+    p, li { line-height: 1.6; }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin: 28px 0; }
+    #swatch { width: 100%; aspect-ratio: 1; border-radius: 12px; }
+    label { display: block; margin: 16px 0 6px; }
+    input, select, textarea, button { font: inherit; padding: 10px; border: 1px solid #777; border-radius: 6px; background: #242424; color: #eee; }
+    input:not([type=file]), select, textarea { box-sizing: border-box; width: 100%; }
+    textarea { min-height: 80px; }
+    button { cursor: pointer; }
+    button:disabled { opacity: .4; cursor: default; }
+    :focus-visible { outline: 3px solid #eee; outline-offset: 3px; }
+    nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    #message { min-height: 1.6em; }
+    small { color: #bbb; }
+    code { font-size: 1.1em; }
+    @media(max-width: 650px) { main { grid-template-columns: 1fr; } #swatch { max-height: 40vh; aspect-ratio: auto; height: 300px; } }
+  </style>
+</head>
+<body>
+  <h1>QR65 — Saturated hue pass</h1>
+  <p>Match the <strong>hue</strong> of each reference using ConneX. There are 12 saturated hues and three repeat checks. A brighter or darker appearance is acceptable for this pass; note it rather than changing speaker brightness.</p>
+  <details open>
+    <summary>Before you start</summary>
+    <ol>
+      <li>Release daemon control with <code>edifier-qr65 release</code>, then connect ConneX.</li>
+      <li>Select static lighting and set speaker brightness to <strong>50%</strong>.</li>
+      <li>Disable display night light/color filters. Keep monitor brightness, room lighting, and viewing position stable.</li>
+      <li>Adjust the app color until the speaker hue looks closest to the reference. You may use any position on the app wheel, including its interior.</li>
+      <li>Enter the app HEX, choose match quality, and continue. Judge repeat samples afresh.</li>
+    </ol>
+    <p>This page displays references only; it does not control the speaker. Local progress saving is best-effort: export a checkpoint before closing.</p>
+  </details>
+  <label for="conditions">Session conditions</label>
+  <textarea id="conditions" maxlength="4000" placeholder="Monitor/brightness, room lighting, speaker placement, anything that changes during the session"></textarea>
+  <main>
+    <section aria-label="Reference color">
+      <h2 id="position"></h2>
+      <p>Target: <code id="target"></code> · HSV saturation/value: 100%</p>
+      <div id="swatch" role="img"></div>
+    </section>
+    <section aria-label="Measurement">
+      <p id="progress"></p>
+      <label for="jump">Go to sample</label><select id="jump"></select>
+      <label for="command">Closest ConneX HEX</label>
+      <input id="command" placeholder="#FF8000" maxlength="7" spellcheck="false" autocomplete="off">
+      <label for="quality">Match quality</label>
+      <select id="quality"><option value="">Choose…</option><option value="good">Good hue match</option><option value="closest">Closest achievable, still imperfect</option></select>
+      <label for="notes">Notes</label>
+      <textarea id="notes" maxlength="4000" placeholder="Remaining tint, brightness mismatch, difficulty matching…"></textarea>
+      <nav><button id="previous">Previous</button><button id="next">Save & next</button></nav>
+      <p><small>Empty samples can be skipped and exported as incomplete. Malformed HEX must be corrected or cleared.</small></p>
+    </section>
+  </main>
+  <nav><button id="export">Export JSON checkpoint</button></nav>
+  <label for="import">Resume from exported JSON (replaces this page's current session after confirmation)</label>
+  <input id="import" type="file" accept=".json,application/json">
+  <p id="message" role="status" aria-live="polite"></p>
+  <p>When all 15 samples are complete, export and share the JSON. Disconnect ConneX and run <code>edifier-qr65 resume</code> to restore daemon control. White compensation and pastel preference trials come afterward.</p>
+  <script src="hue-pass.js"></script>
+</body>
+</html>

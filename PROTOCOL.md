@@ -162,7 +162,7 @@ the same CSS color on the desktop. A manually selected `#FF4000` looked closer
 to the intended desktop orange on this speaker.
 
 This is a physical gamut/calibration difference, not a preset command or RGB
-encoding difference. The model family was fitted from 20 subjective chromatic
+encoding difference. The original model family was fitted from 20 subjective chromatic
 target-to-ConneX matches and evaluated on eight withheld chromatic matches, all
 collected at brightness `50`. Four neutral observations were excluded from
 coefficient estimation because no tested RGB command removed the blue cast. A
@@ -177,6 +177,17 @@ command, and neutral colors retained a blue cast. The profile is subjective,
 specific to the tested unit, display, viewing conditions, and 50% brightness;
 it is not an instrument-measured physical characterization. Literal RGB remains
 the default and live A/B fallback.
+
+The second subjective pass supersedes that runtime model. It combines 12 saturated
+hues, three repeats, a compensated white command `#FFE080`, and three pastel
+preferences. White-command trials improved neutrality, correcting the earlier
+decision to preserve neutral RGB unchanged. The runtime uses hue interpolation,
+a saturation preference curve, and local pastel adjustments, with black preserved.
+Orange `#E68E0D` now maps to `#E64003`. The user preferred the new profile over the
+old one on three additional pastel accents and the original orange. Measurements
+used speaker brightness 50%, monitor 75%, and disabled night light; one yellow
+brightness check also retained hue at 25%. This does not establish uniform behavior
+across all brightness levels. See `calibration/second-pass-observations.md`.
 
 ## Connection Constraint
 

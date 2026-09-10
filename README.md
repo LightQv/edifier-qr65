@@ -208,11 +208,15 @@ edifier-qr65 color-matching off
 
 With matching enabled, `requestedColor` remains the consumer's display target
 while `appliedColor` reports the transformed RGB confirmed on the QR65. The
-profile uses 28 subjective chromatic target-to-ConneX observations collected at
-50% brightness. Four neutral observations were excluded because the tested
-speaker retained a blue cast; neutral RGB is therefore preserved by design.
-The fitted profile maps `#E68E0D` to approximately `#FD3600`. It is specific to
-the tested unit and viewing conditions, so literal RGB remains the safe default.
+second-pass profile uses 12 saturated hues, three repeats, compensated white,
+and three pastel preferences, measured at speaker brightness 50%, monitor 75%,
+and night light disabled. It favors recognizable hue over literal desaturation.
+White maps to `#FFE080`; black remains black. Orange `#E68E0D` maps to `#E64003`,
+and mauve `#CBA6F7` to `#C244C0`. The user preferred this profile on three additional
+pastel accents and the original orange regression target. Small saturation
+differences remain; dark targets and the full brightness range are not extensively
+characterized. Literal RGB remains the default. See the evidence in
+`calibration/second-pass-observations.md`.
 
 ### Release and resume
 
@@ -343,21 +347,23 @@ verify the tested global-model GATT service and query array `4`, static mode `7`
 
 ## Calibration
 
-To collect a display-to-light profile, open `calibration/index.html` in a
+To collect saturated hue observations, open `calibration/hue-pass.html` in a
 color-managed browser and follow [`calibration/README.md`](calibration/README.md).
-The page presents 24 fitting colors and eight withheld validation colors,
-stores progress locally, and exports target-to-ConneX measurements as JSON.
+The page presents 12 hues and three repeat checks, stores progress locally, and
+exports JSON. The original experiment remains in `index.html`, `measurements.json`,
+`fit.py`, and `legacy_color.py` for historical reproduction and offline comparison.
 
 Keep display conditions fixed, release BLE to ConneX, set static lighting to
 exactly 50% brightness, and disable daemon color matching while measuring. To
-reproduce the fitted coefficients and held-out metrics:
+reproduce the second-pass fit and verify runtime agreement:
 
 ```bash
-python -m pip install '.[calibration]'
-python calibration/fit.py
+python calibration/candidate.py
+PYTHONPATH=src python -m unittest discover -s calibration -p test_candidate.py
 ```
 
-NumPy is needed only for calibration fitting, not daemon operation.
+The current fitter and runtime do not need NumPy. Historical `calibration/fit.py`
+still uses the optional `calibration` dependency to reproduce the original profile.
 
 ## Migration from the Old Combined Installation
 
