@@ -227,7 +227,7 @@ def _control_daemon(action: str) -> None:
             write_runtime_status(
                 "released",
                 runtime["appliedColor"],
-                "BLE released. Connect the phone to QR65 Bluetooth audio, then open ConneX.",
+                "BLE released. Keep a paired audio host connected if ConneX cannot see the QR65.",
                 applied_brightness=runtime["appliedBrightness"],
             )
             return

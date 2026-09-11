@@ -18,11 +18,13 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install test dependencies
-        run: python -m pip install '.[test,calibration]' 'build>=1,<2'
+        run: python -m pip install '.[test]' 'build>=1,<2'
       - name: Test backend
         run: python -m pytest -q -p no:cacheprovider
-      - name: Refit calibration profile
-        run: python calibration/fit.py
+      - name: Reproduce calibration profile
+        run: |
+          python calibration/model.py
+          node --check calibration/hue-pass.js
       - name: Build Python distributions
         run: python -m build
       - name: Check shell scripts

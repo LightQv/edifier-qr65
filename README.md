@@ -28,24 +28,40 @@ verified.
 
 ## Hardware Connection Constraint
 
-On the tested QR65, the BLE control service and Edifier manufacturer data are
-advertised only while both conditions are true:
+On the tested QR65, cold activation after a speaker power cycle required:
 
 1. The speaker is using Bluetooth input.
 2. A Bluetooth Classic audio connection is active.
 
 After BLE connects, that connection survives switching the speaker back to a
-wired input and does not interrupt analog playback. This constraint is why the
-daemon keeps one persistent GATT session instead of reconnecting for every
-color.
+wired input and does not interrupt analog playback. A warm speaker also allowed
+a fresh BLE connection without Classic audio, but this did not survive a power
+cycle and is not a reliable cold-start procedure. The Classic connection does
+not need to be Linux's default audio output.
+
+Pairing, audio connection, codecs, and output routing remain the user's and
+operating system's responsibility; the daemon manages only BLE lighting
+control. This constraint is why it keeps one persistent GATT session instead of
+reconnecting for every color.
 
 After a speaker power cycle, service restart, or lost BLE connection:
 
-1. Close ConneX.
+1. Close ConneX if it is open.
 2. Switch the QR65 to Bluetooth input.
-3. Let a previously paired phone establish its Bluetooth audio connection.
+3. Connect any previously paired Bluetooth audio host, such as the computer or
+   a phone. ConneX is not required.
 4. Wait for `edifier-qr65 status` to report `connected`.
 5. Switch the QR65 back to the wired input.
+
+Alternatively, leave the QR65 on Bluetooth input and let the operating system
+reconnect its paired audio endpoint normally. Tests on the current host
+confirmed automatic audio and BLE recovery after speaker power cycles and
+computer boots. The daemon does not initiate or configure the audio connection;
+once BLE becomes available, its retry loop discovers and controls it.
+
+Cold-starting the tested speaker on RCA did not expose either its BLE controller
+or Classic audio endpoint to Linux or ConneX. No software-only RCA activation
+path is currently known.
 
 ConneX and the Linux daemon cannot own the QR65 BLE connection simultaneously.
 Use `release` and `resume` for an intentional handoff.
@@ -133,8 +149,8 @@ systemctl --user restart edifier-qr65
 journalctl --user -u edifier-qr65 -f
 ```
 
-Typical log messages include `connected; switch the QR65 to wired input when
-ready` and `applied #89B4FA at 50% for requested #89B4FA`. If status remains
+Typical log messages include `BLE control connected` and `applied #89B4FA at
+50% for requested #89B4FA`. If status remains
 `activation-required`, repeat the Bluetooth-input activation procedure.
 
 The unit hides the home directory except for a read-only bind of its managed
@@ -208,15 +224,17 @@ edifier-qr65 color-matching off
 
 With matching enabled, `requestedColor` remains the consumer's display target
 while `appliedColor` reports the transformed RGB confirmed on the QR65. The
-second-pass profile uses 12 saturated hues, three repeats, compensated white,
-and three pastel preferences, measured at speaker brightness 50%, monitor 75%,
-and night light disabled. It favors recognizable hue over literal desaturation.
+`subjective-v1` profile uses 12 saturated hues, three repeats, compensated
+white, and three pastel preferences, measured at speaker brightness 50%,
+monitor 75%, and night light disabled. It favors recognizable hue over literal
+desaturation.
 White maps to `#FFE080`; black remains black. Orange `#E68E0D` maps to `#E64003`,
 and mauve `#CBA6F7` to `#C244C0`. The user preferred this profile on three additional
 pastel accents and the original orange regression target. Small saturation
 differences remain; dark targets and the full brightness range are not extensively
-characterized. Literal RGB remains the default. See the evidence in
-`calibration/second-pass-observations.md`.
+characterized. Literal RGB remains the default. See the method in
+[`calibration/README.md`](calibration/README.md) and evidence in
+[`calibration/OBSERVATIONS.md`](calibration/OBSERVATIONS.md).
 
 ### Release and resume
 
@@ -225,14 +243,16 @@ fully closing the app:
 
 ```bash
 edifier-qr65 release
-# Connect the phone to QR65 Bluetooth audio, then open ConneX.
+# Keep a paired audio host connected if ConneX cannot see the speaker.
 edifier-qr65 resume
 ```
 
 `release` cleanly stops only the QR65 user service and writes a non-expiring
-`released` status. `resume` starts only that service; it does not alter mode,
-brightness, matching, or requested color. Reclaiming BLE may require the normal
-Bluetooth-input activation flow.
+`released` status. The service remains enabled, so this handoff is temporary:
+it starts again at the next user login/reboot, installer restart, or explicit
+`resume`. `resume` starts only that service; neither command changes pairing,
+audio routing, mode, brightness, matching, or requested color. Reclaiming BLE
+may require the normal Bluetooth-input activation flow.
 
 ## Versioned Consumer API v1
 
@@ -289,7 +309,7 @@ Exact `connection` states are:
 - `starting`: daemon initialization has begun.
 - `scanning`: searching for the verified QR65 advertisement.
 - `activation-required`: no single verified advertisement is available; use
-  the Bluetooth-input activation flow.
+  the Bluetooth-input activation flow with any paired audio host.
 - `connecting`: opening and validating the GATT session.
 - `connected`: the session is live and its heartbeat is current.
 - `released`: the daemon was intentionally stopped for BLE handoff; this state
@@ -350,20 +370,19 @@ verify the tested global-model GATT service and query array `4`, static mode `7`
 To collect saturated hue observations, open `calibration/hue-pass.html` in a
 color-managed browser and follow [`calibration/README.md`](calibration/README.md).
 The page presents 12 hues and three repeat checks, stores progress locally, and
-exports JSON. The original experiment remains in `index.html`, `measurements.json`,
-`fit.py`, and `legacy_color.py` for historical reproduction and offline comparison.
+exports JSON. The accepted observations and qualitative comparisons are retained
+alongside the tool; superseded experiments remain available through Git history.
 
 Keep display conditions fixed, release BLE to ConneX, set static lighting to
 exactly 50% brightness, and disable daemon color matching while measuring. To
-reproduce the second-pass fit and verify runtime agreement:
+reproduce the accepted profile and verify runtime agreement:
 
 ```bash
-python calibration/candidate.py
-PYTHONPATH=src python -m unittest discover -s calibration -p test_candidate.py
+python calibration/model.py
+PYTHONPATH=src python -m unittest discover -s calibration -p test_model.py
 ```
 
-The current fitter and runtime do not need NumPy. Historical `calibration/fit.py`
-still uses the optional `calibration` dependency to reproduce the original profile.
+The calibration model and runtime use only the Python standard library.
 
 ## Migration from the Old Combined Installation
 
@@ -421,8 +440,7 @@ python -m build
 ```
 
 The systemd verification expects the managed environment's daemon executable to
-exist; CI uses a temporary executable at that path. NumPy is required only for refitting the
-calibration profile with `python calibration/fit.py`.
+exist; CI uses a temporary executable at that path.
 
 ## License
 

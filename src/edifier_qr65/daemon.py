@@ -62,7 +62,7 @@ async def _run_owned() -> None:
                 report(
                     "activation-required",
                     last_applied,
-                    message="Switch to Bluetooth input and let the paired phone connect"
+                    message="Switch to Bluetooth input and connect a paired Bluetooth audio host"
                     + (f"; last error: {last_error}" if last_error else ""),
                 )
                 await asyncio.sleep(3)
@@ -80,7 +80,7 @@ async def _run_owned() -> None:
                 last_brightness = static.brightness
                 last_error = ""
 
-                LOG.info("connected; switch the QR65 to wired input when ready")
+                LOG.info("BLE control connected")
                 applied: tuple[int, int, int] | None = None
                 applied_request: tuple[
                     int, tuple[int, int, int], int | None, bool

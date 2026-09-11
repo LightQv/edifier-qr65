@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "profile": "second-pass-candidate-1",
+  "profile": "subjective-v1",
   "conditions": {"speakerBrightness": 50, "monitorBrightness": 75, "nightLight": false},
   "white": "#FFE080",
   "hues": [

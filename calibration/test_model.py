@@ -1,14 +1,14 @@
-"""Behavioral checks for the isolated second-pass candidate."""
+"""Behavioral checks for the accepted subjective profile."""
 
 import colorsys
 import unittest
 
-from candidate import Candidate
+from model import Profile
 
 
-class CandidateTests(unittest.TestCase):
+class ProfileTests(unittest.TestCase):
     def setUp(self):
-        self.model = Candidate()
+        self.model = Profile()
 
     def test_anchors_and_black(self):
         self.assertEqual(self.model.command("#000000"), "#000000")

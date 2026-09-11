@@ -24,7 +24,6 @@ classifiers = [
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
-calibration = ["numpy>=2,<3"]
 
 [project.urls]
 Homepage = "https://github.com/LightQv/edifier-qr65"

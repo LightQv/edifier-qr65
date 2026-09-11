@@ -1,10 +1,10 @@
-"""Second-pass constants reproduced by calibration/candidate.py.
+"""Subjective profile constants reproduced by calibration/model.py.
 
 Subjective QR65 measurements: speaker 50%, monitor 75%, night light disabled.
 Training data and qualitative limitations are retained under calibration/.
 """
 
-PROFILE_NAME = "second-pass-candidate-1"
+PROFILE_NAME = "subjective-v1"
 POWER = 0.38
 EPSILON = 0.02
 WHITE = (1.0, 0.8784313725490196, 0.5019607843137255)

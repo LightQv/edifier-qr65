@@ -1,7 +1,7 @@
-"""Reproduce an experimental subjective profile without modifying the daemon.
+"""Reproduce the accepted subjective profile without modifying the daemon.
 
 This is a geometric interpolation hypothesis, not a physical LED model. Run with
-HEX arguments to print candidate commands; no BLE or configuration writes occur.
+HEX arguments to print profile commands; no BLE or configuration writes occur.
 """
 
 from __future__ import annotations
@@ -31,11 +31,11 @@ def smooth(value):
     return value * value * (3 - 2 * value)
 
 
-class Candidate:
+class Profile:
     """Interpolate hue boundaries, compensated white, and local pastel residuals."""
 
     def __init__(self, path: Path | None = None):
-        data = json.loads((path or Path(__file__).with_name("second-pass.json")).read_text())
+        data = json.loads((path or Path(__file__).with_name("observations.json")).read_text())
         if data["version"] != 1:
             raise ValueError("unsupported observation version")
         self.data = data
@@ -104,19 +104,21 @@ class Candidate:
         return tuple(min(1.0, max(0.0, v * channel)) for channel in result)
 
     def command(self, color: str) -> str:
-        """Format a candidate prediction as a HEX command."""
+        """Format a profile prediction as a HEX command."""
         return "#" + "".join(f"{round(channel * 255):02X}" for channel in self.predict(color))
 
 
 def main():
-    """Print reproducible model metadata and candidate color commands."""
+    """Print reproducible model metadata and profile color commands."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("colors", nargs="*")
     args = parser.parse_args()
-    model = Candidate()
+    model = Profile()
     print(json.dumps({"profile": model.data["profile"], "saturationPower": model.power,
-                      "baseCommandRMSE": math.sqrt(model.loss(model.power) / 9) * 255,
-                      "warning": "Experimental; training agreement is not visual validation."}))
+                      "baseCommandRMSE": math.sqrt(
+                          model.loss(model.power) / (len(model.pastels) * 3)
+                      ) * 255,
+                      "warning": "Subjective profile; training agreement is not visual validation."}))
     for color in args.colors or [row["target"] for row in model.data["pastels"]]:
         print(f"{color.upper()} -> {model.command(color)}")
 
