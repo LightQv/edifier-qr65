@@ -25,6 +25,17 @@ def test_dynamic_mode_queues_explicit_external_color(xdg_dirs) -> None:
     assert read_request().source == "dynamic"
 
 
+def test_dynamic_mode_does_not_rewrite_unchanged_config(xdg_dirs, monkeypatch) -> None:
+    save_config(Config(mode="dynamic"))
+
+    monkeypatch.setattr(
+        "edifier_qr65.config.save_config",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("config is unchanged")),
+    )
+
+    assert set_dynamic_mode("#89B4FA").color == "#89B4FA"
+
+
 def test_dynamic_mode_rejects_invalid_color_without_changes(xdg_dirs) -> None:
     save_config(Config(mode="static", static_color="#112233"))
     request_color("#445566", "static")

@@ -6,6 +6,7 @@ import fcntl
 import json
 import os
 import re
+import socket
 import tempfile
 import time
 from contextlib import contextmanager
@@ -38,6 +39,11 @@ def lock_file() -> Path:
 def ownership_lock_file() -> Path:
     """Return the lock that serializes live BLE controller ownership."""
     return state_file().with_name("ble.lock")
+
+
+def notification_socket_file() -> Path:
+    """Return the best-effort daemon wakeup socket path."""
+    return state_file().with_name("notify.sock")
 
 
 def parse_rgb(value: str) -> tuple[int, int, int]:
@@ -127,6 +133,16 @@ def _atomic_write(path: Path, content: str, prefix: str) -> None:
             temporary_path.unlink(missing_ok=True)
 
 
+def _notify_daemon() -> None:
+    """Wake a running daemon after durable state has been committed."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as notifier:
+            notifier.setblocking(False)
+            notifier.sendto(b"1", str(notification_socket_file()))
+    except OSError:
+        pass
+
+
 @contextmanager
 def operation_lock() -> Iterator[None]:
     """Serialize configuration and desired-color operations across processes."""
@@ -179,6 +195,7 @@ def _request_color(value: str, source: str = "direct") -> tuple[int, int, int]:
     _atomic_write(request_file(), json.dumps(metadata, separators=(",", ":")) + "\n", ".request-")
     # Keep the old daemon operational; new readers never prefer this mirror.
     _atomic_write(state_file(), normalized + "\n", ".color-")
+    _notify_daemon()
     return color
 
 
@@ -224,7 +241,8 @@ def set_dynamic_mode(value: str) -> SyncResult:
     normalized = value.strip().upper()
     with operation_lock():
         config = load_config()
-        save_config(replace(config, mode="dynamic"))
+        if config.mode != "dynamic":
+            save_config(replace(config, mode="dynamic"))
         _request_color(normalized, "dynamic")
     return SyncResult(normalized, "dynamic")
 
@@ -249,6 +267,7 @@ def set_brightness(value: int) -> int:
         raise ValueError("brightness must be between 0 and 100")
     with operation_lock():
         save_config(replace(load_config(), brightness=value))
+        _notify_daemon()
     return value
 
 
@@ -260,4 +279,5 @@ def set_color_matching(enabled: bool) -> bool:
         raise ValueError("color matching state must be boolean")
     with operation_lock():
         save_config(replace(load_config(), color_matching=enabled))
+        _notify_daemon()
     return enabled

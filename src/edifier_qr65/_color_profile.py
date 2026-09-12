@@ -7,6 +7,8 @@ Training data and qualitative limitations are retained under calibration/.
 PROFILE_NAME = "subjective-v1"
 POWER = 0.38
 EPSILON = 0.02
+NEUTRAL_SATURATION = 0.10
+NEUTRAL_BLEND_END = 0.20
 WHITE = (1.0, 0.8784313725490196, 0.5019607843137255)
 BOUNDARY = (
     (0.0, (1.0, 0.0, 0.0)),

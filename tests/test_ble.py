@@ -266,3 +266,28 @@ def test_one_shot_static_write_passes_initialized_state_by_keyword(
 
     assert asyncio.run(set_static_color("device", 1, 2, 3, 10)) == (50, b"packet")
     assert seen == {"rgb": (1, 2, 3), "kwargs": {"state": ambient}}
+
+
+def test_delayed_one_shot_write_refreshes_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    ambient = object()
+    seen = {}
+
+    class Connection:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *_exc): return None
+        async def initialize(self): return None, None, ambient
+        async def apply_static_color(self, red, green, blue, **kwargs):
+            seen.update(rgb=(red, green, blue), kwargs=kwargs)
+            return 50, b"packet"
+
+    async def sleep(_delay: float) -> None:
+        return None
+
+    monkeypatch.setattr("edifier_qr65.ble.QR65Connection", lambda *_args: Connection())
+    monkeypatch.setattr("edifier_qr65.ble.asyncio.sleep", sleep)
+
+    assert asyncio.run(set_static_color("device", 1, 2, 3, 10, delay=1)) == (
+        50,
+        b"packet",
+    )
+    assert seen == {"rgb": (1, 2, 3), "kwargs": {"state": None}}

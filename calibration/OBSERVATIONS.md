@@ -31,6 +31,10 @@ Literal `#FFFFFF` appeared blue. Progressive trials reduced blue and then green:
 | `#FFE080` | Closest tested neutral white |
 
 The accepted white anchor is approximate and is not a universal RGB multiplier.
+Very light neutral accents exposed a model gap: their small RGB differences
+selected unstable hue-boundary corrections and appeared blue again. The runtime
+therefore uses the white anchor through 10% HSV saturation and transitions to
+the fitted chromatic model from 10% through 20%.
 
 ## Pastel Preferences
 
@@ -60,7 +64,7 @@ single check does not establish behavior for other colors or brightness levels.
 ## Limitations
 
 - Results are subjective and specific to the tested speaker and viewing setup.
-- Dark and near-neutral targets need broader validation.
+- Dark targets and the 10%-20% near-neutral transition need broader validation.
 - HSV value scaling is an approximation, not photometric calibration.
 - Brightness behavior is not characterized beyond the yellow check above.
 - Small, conflicting saturation preferences were recorded rather than fitted

@@ -1,6 +1,9 @@
 import json
 import math
+import os
 import subprocess
+import sys
+from pathlib import Path
 
 from edifier_qr65.cli import main
 from edifier_qr65.config import Config, config_file, load_config, save_config
@@ -87,6 +90,26 @@ def test_api_version_json_contract(capsys) -> None:
         "daemonVersion": "0.1.0",
         "statusVersion": 1,
     }
+
+
+def test_local_api_command_does_not_import_bleak() -> None:
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(Path(__file__).parents[1] / "src")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from edifier_qr65.cli import main; "
+            "assert 'bleak' not in sys.modules; raise SystemExit(main(['api-version']))",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=5,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_status_json_contract(xdg_dirs, capsys) -> None:

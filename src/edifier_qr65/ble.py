@@ -17,6 +17,7 @@ from .protocol import (
     AmbientLightState,
     QR65_STATIC_MODE,
     QR65_LIGHT_ARRAY,
+    QR65_SERVICE_UUIDS,
     SUPPORT_QUERY,
     Frame,
     decode_ambient_light,
@@ -31,9 +32,6 @@ MAX_FRAME_SIZE = 1024
 EDIFIER_MANUFACTURER_ID = 0x07E0
 QR65_SEARCH_UUIDS = {
     "00005d00-0000-1000-8000-00805f9b34fb",
-}
-QR65_SERVICE_UUIDS = {
-    "48095d01-1a48-11e9-ab14-d663bd873d93",
 }
 READ_UUID = "48090001-1a48-11e9-ab14-d663bd873d93"
 WRITE_UUID = "48090002-1a48-11e9-ab14-d663bd873d93"
@@ -60,10 +58,15 @@ class DiscoveredDevice:
         )
 
 
-async def discover(timeout: float, include_all: bool = False) -> list[DiscoveredDevice]:
+async def discover(
+    timeout: float, include_all: bool = False
+) -> list[DiscoveredDevice]:
     """Discover QR65 candidates, optionally including unrelated BLE devices."""
     found = await BleakScanner.discover(timeout=timeout, return_adv=True)
-    devices = [DiscoveredDevice(device, advertisement) for device, advertisement in found.values()]
+    devices = [
+        DiscoveredDevice(device, advertisement)
+        for device, advertisement in found.values()
+    ]
     if not include_all:
         devices = [item for item in devices if item.is_qr65]
     return sorted(devices, key=lambda item: item.advertisement.rssi, reverse=True)
@@ -263,4 +266,5 @@ async def set_static_color(
         _support, _ambient_frame, ambient = await connection.initialize()
         if delay:
             await asyncio.sleep(delay)
+            ambient = None
         return await connection.apply_static_color(red, green, blue, state=ambient)

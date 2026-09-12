@@ -25,6 +25,17 @@ def test_runtime_status_write_is_atomic(xdg_dirs) -> None:
     assert not list(status_file().parent.glob(".status-*"))
 
 
+def test_ephemeral_status_does_not_force_storage_sync(xdg_dirs, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "edifier_qr65.status.os.fsync",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("must not fsync status")),
+    )
+
+    write_runtime_status("connected", "#123456")
+
+    assert read_runtime_status()["appliedColor"] == "#123456"
+
+
 def test_status_combines_stable_camel_case_fields(xdg_dirs) -> None:
     request_color("#89B4FA", "dynamic")
     write_runtime_status("connected", "#89B4FA", now=100)

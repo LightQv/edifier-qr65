@@ -173,6 +173,9 @@ The accepted `subjective-v1` profile supersedes that runtime model. It combines
 preferences. White-command trials improved neutrality, correcting the earlier
 decision to preserve neutral RGB unchanged. The runtime uses hue interpolation,
 a saturation preference curve, and local pastel adjustments, with black preserved.
+Targets through 10% HSV saturation use the compensated white anchor because tiny
+near-neutral channel differences otherwise selected visibly cold hue corrections;
+a smooth 10%-20% transition rejoins the fitted chromatic model.
 Orange `#E68E0D` now maps to `#E64003`. The user preferred the new profile over the
 old one on three additional pastel accents and the original orange. Measurements
 used speaker brightness 50%, monitor 75%, and disabled night light; one yellow

@@ -1,10 +1,12 @@
 import json
 import multiprocessing
+import socket
 
 import pytest
 
 from edifier_qr65.desired import (
     operation_lock,
+    notification_socket_file,
     ownership_lock,
     parse_rgb,
     read_request,
@@ -81,6 +83,42 @@ def test_request_json_contains_complete_atomic_contract(xdg_dirs) -> None:
     assert data["source"] == "dynamic"
     assert type(data["updatedAt"]) is int
     assert not list(request_file().parent.glob(".request-*"))
+
+
+def test_request_notifies_running_daemon_after_persistence(xdg_dirs) -> None:
+    path = notification_socket_file()
+    path.parent.mkdir(parents=True)
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as listener:
+        listener.bind(str(path))
+        listener.settimeout(1)
+
+        request_color("#ABCDEF", "dynamic")
+
+        assert listener.recv(1) == b"1"
+        assert read_request().color == "#ABCDEF"
+
+
+def test_full_notification_queue_never_blocks_durable_request(
+    xdg_dirs, monkeypatch
+) -> None:
+    class FullSocket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return None
+
+        def setblocking(self, blocking: bool) -> None:
+            assert blocking is False
+
+        def sendto(self, *_args) -> None:
+            raise BlockingIOError
+
+    monkeypatch.setattr("edifier_qr65.desired.socket.socket", lambda *_args: FullSocket())
+
+    request_color("#ABCDEF", "dynamic")
+
+    assert read_request().color == "#ABCDEF"
 
 
 def test_repeated_request_gets_new_generation(xdg_dirs, monkeypatch) -> None:

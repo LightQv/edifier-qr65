@@ -3,7 +3,7 @@
 import colorsys
 import unittest
 
-from model import Profile
+from model import NEUTRAL_BLEND_END, NEUTRAL_SATURATION, Profile
 
 
 class ProfileTests(unittest.TestCase):
@@ -20,6 +20,10 @@ class ProfileTests(unittest.TestCase):
         neutral = self.model.predict("#808080")
         for color in ("#818080", "#808180", "#808081"):
             self.assertLess(max(abs(a - b) for a, b in zip(neutral, self.model.predict(color))), .025)
+
+    def test_very_light_neutrals_use_white_anchor(self):
+        for color in ("#EAF6FF", "#FFF6EA", "#F6FFEA"):
+            self.assertEqual(self.model.command(color), "#FFE080")
 
     def test_wraparound(self):
         for saturation in (.01, .3, .6, 1):
@@ -52,6 +56,8 @@ class ProfileTests(unittest.TestCase):
             self.skipTest("Use PYTHONPATH=src to verify the runtime profile")
         self.assertEqual(profile.PROFILE_NAME, self.model.data["profile"])
         self.assertEqual(profile.POWER, self.model.power)
+        self.assertEqual(profile.NEUTRAL_SATURATION, NEUTRAL_SATURATION)
+        self.assertEqual(profile.NEUTRAL_BLEND_END, NEUTRAL_BLEND_END)
         self.assertEqual(profile.WHITE, self.model.white)
         self.assertEqual(profile.BOUNDARY, tuple(self.model.boundary))
         self.assertEqual(profile.RESIDUALS, tuple(self.model.residuals))

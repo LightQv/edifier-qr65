@@ -13,6 +13,9 @@ import math
 import re
 from pathlib import Path
 
+NEUTRAL_SATURATION = 0.10
+NEUTRAL_BLEND_END = 0.20
+
 
 def rgb(value: str) -> tuple[float, float, float]:
     """Parse a strict HEX color into normalized channels."""
@@ -101,6 +104,19 @@ class Profile:
             weight = hue_weight * smooth(radial)
             for index in range(3):
                 result[index] += weight * residual[index]
+        neutral_position = min(
+            1.0,
+            max(
+                0.0,
+                (s - NEUTRAL_SATURATION)
+                / (NEUTRAL_BLEND_END - NEUTRAL_SATURATION),
+            ),
+        )
+        chromatic_weight = smooth(neutral_position)
+        result = [
+            white + chromatic_weight * (channel - white)
+            for white, channel in zip(self.white, result, strict=True)
+        ]
         return tuple(min(1.0, max(0.0, v * channel)) for channel in result)
 
     def command(self, color: str) -> str:

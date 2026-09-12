@@ -37,8 +37,12 @@ power curve, then applies smooth local residuals for the three pastel anchors.
 
 The fitted saturation exponent is `0.38`; the regularization epsilon is `0.02`.
 Pastel influence fades to zero at neutral, at full saturation, and 60 degrees
-away in hue. Black is preserved, output channels are bounded, and HSV value
-scales the result after compensation.
+away in hue. Targets at or below 10% HSV saturation use the compensated white
+anchor to prevent unstable near-neutral hues from reintroducing the speaker's
+blue cast. A smooth transition from 10% through 20% rejoins the fitted chromatic
+model without changing the accepted samples above that range. Black is
+preserved, output channels are bounded, and HSV value scales the result after
+compensation.
 
 These choices form a reproducible subjective mapping, not a physical LED or
 colorimetric model. See `OBSERVATIONS.md` for evidence and limitations.

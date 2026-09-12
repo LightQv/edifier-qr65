@@ -4,7 +4,15 @@ from __future__ import annotations
 
 from colorsys import rgb_to_hsv
 
-from ._color_profile import BOUNDARY, EPSILON, POWER, RESIDUALS, WHITE
+from ._color_profile import (
+    BOUNDARY,
+    EPSILON,
+    NEUTRAL_BLEND_END,
+    NEUTRAL_SATURATION,
+    POWER,
+    RESIDUALS,
+    WHITE,
+)
 
 
 def _smooth(value: float) -> float:
@@ -61,4 +69,17 @@ def match_rgb(red: int, green: int, blue: int) -> tuple[int, int, int]:
         weight = hue_weight * _smooth(radial)
         for index in range(3):
             result[index] += weight * residual[index]
+    neutral_position = min(
+        1.0,
+        max(
+            0.0,
+            (saturation - NEUTRAL_SATURATION)
+            / (NEUTRAL_BLEND_END - NEUTRAL_SATURATION),
+        ),
+    )
+    chromatic_weight = _smooth(neutral_position)
+    result = [
+        white + chromatic_weight * (channel - white)
+        for white, channel in zip(WHITE, result, strict=True)
+    ]
     return tuple(round(255 * min(1.0, max(0.0, value * channel))) for channel in result)

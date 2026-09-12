@@ -132,6 +132,7 @@ With the standard XDG locations, installation and runtime use:
 ~/.local/state/edifier-qr65/operation.lock         queued-operation lock
 ~/.local/state/edifier-qr65/ble.lock               BLE ownership lock
 ~/.local/state/edifier-qr65/control.lock           lifecycle-operation lock
+~/.local/state/edifier-qr65/notify.sock            best-effort daemon wakeup
 ```
 
 Lock and state files are created on demand. Custom XDG data, config, and state
@@ -149,8 +150,8 @@ systemctl --user restart edifier-qr65
 journalctl --user -u edifier-qr65 -f
 ```
 
-Typical log messages include `BLE control connected` and `applied #89B4FA at
-50% for requested #89B4FA`. If status remains
+Typical log messages include scan and connection timing plus `applied #89B4FA
+at 50% for requested #89B4FA in 0.234s`. If status remains
 `activation-required`, repeat the Bluetooth-input activation procedure.
 
 The unit hides the home directory except for a read-only bind of its managed
@@ -172,7 +173,9 @@ edifier-qr65 mode dynamic '#89B4FA'
 ```
 
 This atomically persists Dynamic mode and queues the supplied color. A consumer
-must issue the command again whenever its source color changes.
+must issue the command again whenever its source color changes. The durable
+request remains authoritative; a local Unix datagram wakes the daemon
+immediately, with periodic polling as a fallback if a notification is missed.
 
 ### Static mode
 
@@ -228,11 +231,13 @@ while `appliedColor` reports the transformed RGB confirmed on the QR65. The
 white, and three pastel preferences, measured at speaker brightness 50%,
 monitor 75%, and night light disabled. It favors recognizable hue over literal
 desaturation.
-White maps to `#FFE080`; black remains black. Orange `#E68E0D` maps to `#E64003`,
-and mauve `#CBA6F7` to `#C244C0`. The user preferred this profile on three additional
-pastel accents and the original orange regression target. Small saturation
-differences remain; dark targets and the full brightness range are not extensively
-characterized. Literal RGB remains the default. See the method in
+White maps to `#FFE080`; very light colors at or below 10% HSV saturation use
+that neutral-white command, and colors from 10% through 20% transition smoothly
+into the chromatic model. Black remains black. Orange `#E68E0D` maps to
+`#E64003`, and mauve `#CBA6F7` to `#C244C0`. The user preferred this profile on
+three additional pastel accents and the original orange regression target.
+Small saturation differences remain; dark targets and the full brightness range
+are not extensively characterized. Literal RGB remains the default. See the method in
 [`calibration/README.md`](calibration/README.md) and evidence in
 [`calibration/OBSERVATIONS.md`](calibration/OBSERVATIONS.md).
 
@@ -318,10 +323,13 @@ Exact `connection` states are:
   reported a control/application failure.
 
 All states except `released` become `error` when their heartbeat is more than 60
-seconds old. A timestamp over five seconds in the future also becomes `error`.
+seconds old. The daemon writes transitions immediately and refreshes unchanged
+state every 30 seconds without forcing ephemeral status to stable storage. A
+timestamp over five seconds in the future also becomes `error`.
 If a write cannot be confirmed, the daemon blocks that exact request rather than
-repeating hardware writes indefinitely. Change a control or run `sync` to issue
-a new request.
+repeating hardware writes indefinitely, and reports applied color and brightness
+as unknown because the hardware result is indeterminate. Change a control or run
+`sync` to issue a new request.
 
 ## Diagnostics and One-Shot Operations
 
@@ -421,8 +429,10 @@ The implementation transmits only the captured and verified operations:
 
 The CLI does not expose raw packet writes, command probing, unsupported lighting
 modes, input selection, power, reset, charging, volume, OTA, or firmware
-operations. Writes are preceded and followed by live-state queries to validate
-the held session, preserve or set brightness, and confirm the resulting RGB.
+operations. Writes use freshly initialized or newly queried live state to
+validate the held session and preserve or set brightness, then use a post-write
+query to confirm the resulting RGB. The first write after connecting reuses the
+state read during initialization instead of immediately repeating that query.
 See [`PROTOCOL.md`](PROTOCOL.md) for sanitized protocol evidence and known
 limitations.
 

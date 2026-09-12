@@ -7,12 +7,116 @@ from edifier_qr65 import daemon
 from edifier_qr65.ble import ColorApplicationError
 from edifier_qr65.color import match_rgb
 from edifier_qr65.protocol import AmbientLightState, LightMode
-from edifier_qr65.desired import request_color, state_file
+from edifier_qr65.desired import request_color, request_file, state_file
 
 
 class ImmediateEvent:
     async def wait(self) -> bool:
         return False
+
+
+def test_daemon_cancels_and_awaits_heartbeat_before_shutdown(
+    xdg_dirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    phases: list[str] = []
+
+    async def exercise() -> None:
+        heartbeat_started = asyncio.Event()
+        heartbeat_finished = asyncio.Event()
+
+        async def heartbeat_sleep(_delay: float) -> None:
+            heartbeat_started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                heartbeat_finished.set()
+
+        async def discover(_timeout: float, **_kwargs):
+            await asyncio.Future()
+
+        monkeypatch.setattr(daemon, "_sleep", heartbeat_sleep)
+        monkeypatch.setattr(daemon, "discover", discover)
+        monkeypatch.setattr(
+            daemon,
+            "write_runtime_status",
+            lambda connection, *_args, **_kwargs: phases.append(connection),
+        )
+
+        owner = asyncio.create_task(daemon.run())
+        await heartbeat_started.wait()
+        owner.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await owner
+
+        assert heartbeat_finished.is_set()
+
+    asyncio.run(exercise())
+    assert phases == ["starting", "scanning"]
+
+
+def test_heartbeat_does_not_refresh_connected_status_during_teardown(
+    xdg_dirs, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    phases: list[str] = []
+
+    async def exercise() -> None:
+        heartbeat_waiting = asyncio.Event()
+        wake_heartbeat = asyncio.Event()
+        control_waiting = asyncio.Event()
+        teardown_started = asyncio.Event()
+        finish_teardown = asyncio.Event()
+
+        async def heartbeat_sleep(_delay: float) -> None:
+            heartbeat_waiting.set()
+            await wake_heartbeat.wait()
+
+        async def discover(_timeout: float, **_kwargs):
+            return [SimpleNamespace(device=object())]
+
+        async def wait_for_change(*_args) -> bool:
+            control_waiting.set()
+            await asyncio.Future()
+
+        class Connection:
+            client = SimpleNamespace(is_connected=True)
+            disconnected = ImmediateEvent()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *_exc):
+                teardown_started.set()
+                wake_heartbeat.set()
+                await asyncio.sleep(0)
+                assert phases[-1] == "connected"
+                await finish_teardown.wait()
+
+            async def initialize(self):
+                static = LightMode(7, 0, 0, 0, 50, 255)
+                return None, None, AmbientLightState(4, 7, (static,))
+
+        monkeypatch.setattr(daemon, "_sleep", heartbeat_sleep)
+        monkeypatch.setattr(daemon, "discover", discover)
+        monkeypatch.setattr(daemon, "_wait_for_change", wait_for_change)
+        monkeypatch.setattr(daemon, "QR65Connection", lambda *_args: Connection())
+        monkeypatch.setattr(
+            daemon,
+            "write_runtime_status",
+            lambda connection, *_args, **_kwargs: phases.append(connection),
+        )
+
+        owner = asyncio.create_task(daemon.run())
+        await heartbeat_waiting.wait()
+        await control_waiting.wait()
+        owner.cancel()
+        await teardown_started.wait()
+        await asyncio.sleep(0)
+        assert phases == ["starting", "scanning", "connecting", "connected"]
+        finish_teardown.set()
+        with pytest.raises(asyncio.CancelledError):
+            await owner
+
+    asyncio.run(exercise())
 
 
 def test_daemon_keeps_last_good_color_when_queue_becomes_malformed(
@@ -24,6 +128,10 @@ def test_daemon_keeps_last_good_color_when_queue_becomes_malformed(
     save_config(Config(color_matching=True))
     writes: list[tuple[int, int, int, int]] = []
 
+    class NeverEvent:
+        async def wait(self) -> None:
+            await asyncio.Future()
+
     class Client:
         reads = 0
 
@@ -34,7 +142,7 @@ def test_daemon_keeps_last_good_color_when_queue_becomes_malformed(
 
     class Connection:
         client = Client()
-        disconnected = ImmediateEvent()
+        disconnected = NeverEvent()
 
         async def __aenter__(self):
             return self
@@ -47,16 +155,17 @@ def test_daemon_keeps_last_good_color_when_queue_becomes_malformed(
             return None, None, AmbientLightState(4, 7, (static,))
 
         async def apply_static_color(
-            self, red: int, green: int, blue: int, *, brightness: int | None
+            self, red: int, green: int, blue: int, *, brightness: int | None, state=None
         ):
+            assert state is not None
             effective_brightness = 50 if brightness is None else brightness
             writes.append((red, green, blue, effective_brightness))
-            state_file().write_text("malformed", encoding="ascii")
+            request_file().write_text("malformed", encoding="ascii")
             return effective_brightness, b"packet"
 
     calls = 0
 
-    async def discover(_timeout: float):
+    async def discover(_timeout: float, **_kwargs):
         nonlocal calls
         calls += 1
         if calls > 1:
@@ -65,6 +174,7 @@ def test_daemon_keeps_last_good_color_when_queue_becomes_malformed(
 
     monkeypatch.setattr(daemon, "discover", discover)
     monkeypatch.setattr(daemon, "QR65Connection", lambda *_args: Connection())
+    monkeypatch.setattr(daemon, "REQUEST_POLL_SECONDS", 0)
 
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(daemon.run())
@@ -84,7 +194,7 @@ def test_daemon_reports_scanning_and_activation_required(
     phases: list[str] = []
     calls = 0
 
-    async def discover(_timeout: float):
+    async def discover(_timeout: float, **_kwargs):
         nonlocal calls
         calls += 1
         if calls > 1:
@@ -130,13 +240,14 @@ def test_daemon_applies_brightness_and_literal_mode(
         async def __aexit__(self, *_exc): return None
         async def initialize(self):
             return None, None, AmbientLightState(4, 7, (LightMode(7, 0, 0, 0, 50, 255),))
-        async def apply_static_color(self, red, green, blue, *, brightness):
+        async def apply_static_color(self, red, green, blue, *, brightness, state=None):
+            assert state is not None
             writes.append((red, green, blue, brightness))
             return brightness, b"packet"
 
     calls = 0
 
-    async def discover(_timeout):
+    async def discover(_timeout, **_kwargs):
         nonlocal calls
         calls += 1
         if calls > 1:
@@ -173,14 +284,15 @@ def test_daemon_blocks_repeated_write_after_failed_confirmation(
         async def __aexit__(self, *_exc): return None
         async def initialize(self):
             return None, None, AmbientLightState(4, 7, (LightMode(7, 0, 0, 0, 50, 255),))
-        async def apply_static_color(self, *_rgb, brightness=None):
+        async def apply_static_color(self, *_rgb, brightness=None, state=None):
+            assert state is not None
             nonlocal writes
             writes += 1
             raise ColorApplicationError("QR65 did not confirm the requested static color")
 
     calls = 0
 
-    async def discover(_timeout):
+    async def discover(_timeout, **_kwargs):
         nonlocal calls
         calls += 1
         if calls > 1:
@@ -193,3 +305,6 @@ def test_daemon_blocks_repeated_write_after_failed_confirmation(
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(daemon.run())
     assert writes == 1
+    status = state_file().with_name("status.json").read_text(encoding="utf-8")
+    assert '"appliedColor":null' in status
+    assert '"appliedBrightness":null' in status

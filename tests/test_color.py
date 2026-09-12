@@ -26,6 +26,18 @@ def test_matching_uses_compensated_neutral_anchor(value: int) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "target",
+    [
+        (0xEA, 0xF6, 0xFF),
+        (0xFF, 0xF6, 0xEA),
+        (0xF6, 0xFF, 0xEA),
+    ],
+)
+def test_matching_uses_white_anchor_for_very_light_neutrals(target) -> None:
+    assert match_rgb(*target) == (0xFF, 0xE0, 0x80)
+
+
 @pytest.mark.parametrize("rgb", [(-1, 0, 0), (0, 256, 0), (1.0, 0, 0), (True, 0, 0)])
 def test_matching_rejects_invalid_channels(rgb) -> None:
     with pytest.raises(ValueError, match="RGB channels"):
