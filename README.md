@@ -10,6 +10,13 @@ install, update, remove, or otherwise manage those consumers. The
 [Omarchy QR65 plugin](https://github.com/LightQv/omarchy-edifier-qr65) is one
 optional consumer.
 
+After installing this daemon, Omarchy users can add and enable that consumer
+separately:
+
+```bash
+omarchy plugin add https://github.com/LightQv/omarchy-edifier-qr65.git --enable
+```
+
 ## Confirmed Hardware and Software
 
 The implementation and protocol safety boundary were confirmed with:
@@ -438,7 +445,8 @@ limitations.
 
 ## Development Checks
 
-Install test dependencies in a development environment, then run:
+Install the project's test and build dependencies in a development environment,
+then run:
 
 ```bash
 python -m pytest -q
