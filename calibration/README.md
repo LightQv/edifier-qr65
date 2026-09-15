@@ -1,41 +1,66 @@
 # QR65 Display-to-Light Calibration
 
-Open `index.html` in a color-managed browser and complete all 32 samples. The
-dataset contains 24 role-tagged fitting samples and eight role-tagged validation
-samples, presented in one shuffled sequence. Four fit samples are neutral-color
-observations excluded from coefficient fitting, leaving 20 chromatic rows. The
-model family is evaluated on the eight withheld samples before its final
-coefficients are refitted on all 28 chromatic observations. Neutral preservation
-is imposed separately by the runtime model because the measurements indicate
-that the QR65 cannot reproduce neutral light at this brightness.
+The accepted `subjective-v1` profile maps a requested display HEX color to the
+RGB command that most closely reproduced it on the tested QR65. Literal RGB was
+not sufficient: white appeared blue, several cyan/green hues shifted, and pastel
+accents lost their intended character.
 
-Before measuring:
+This directory contains only the accepted calibration pass:
 
-- Disable night light and other display color filters.
-- Keep monitor brightness, room lighting, and viewing position unchanged.
-- Release BLE control to ConneX.
-- Select ConneX static lighting and set brightness to exactly 50%.
-- Adjust RGB only. Do not compensate with the brightness control.
+- `observations.json`: source hue, repeat, white, and pastel observations
+- `hue-pass.html` and `hue-pass.js`: standalone collection tool
+- `model.py`: standard-library reproduction of the fitted profile
+- `test_model.py`: model invariants and runtime agreement checks
+- `OBSERVATIONS.md`: conditions, visual comparisons, and limitations
 
-For each reference, enter the ConneX hex that makes the QR65 look closest to
-the displayed swatch. Select the closest-match checkbox when the target is
-outside the light's reproducible gamut. Progress remains in browser local
-storage, and `Export JSON` can create a checkpoint at any time.
-An empty current field is exported as an incomplete measurement; malformed hex
-text must be corrected or cleared first.
+## Collection
 
-All entries are subjective observations; leaving the checkbox clear means only
-that no obvious gamut limit was reached, not that the match is instrumentally
-exact. The fitting process regularizes these observations to reduce visual and
-input noise.
+Open `hue-pass.html` in a color-managed browser. No server or dependencies are
+required. The page guides 12 saturated hues and three repeated primaries at 50%
+speaker brightness.
 
-The exported `qr65-calibration.json` contains the target-to-command pairs used
-to fit and validate the replacement color model.
+1. Disable night light and other display color filters.
+2. Keep monitor brightness, room lighting, and viewing position stable.
+3. Run `edifier-qr65 release`, connect ConneX, and select static lighting.
+4. For each displayed target, adjust the ConneX HEX until the light is closest.
+5. Export JSON checkpoints regularly.
+6. Close ConneX and run `edifier-qr65 resume` when finished.
 
-To reproduce the fitted coefficients and held-out metrics, install the optional
-calibration dependency and run the fitter from the repository root:
+The collection tool never changes daemon files or BLE state itself.
+
+## Model
+
+The model uses periodic piecewise-linear interpolation around the measured
+saturated hue boundary. Repeated measurements receive equal weight. It blends
+the compensated white anchor toward that boundary using a regularized saturation
+power curve, then applies smooth local residuals for the three pastel anchors.
+
+The fitted saturation exponent is `0.38`; the regularization epsilon is `0.02`.
+Pastel influence fades to zero at neutral, at full saturation, and 60 degrees
+away in hue. Targets at or below 10% HSV saturation use the compensated white
+anchor to prevent unstable near-neutral hues from reintroducing the speaker's
+blue cast. A smooth transition from 10% through 20% rejoins the fitted chromatic
+model without changing the accepted samples above that range. Black is
+preserved, output channels are bounded, and HSV value scales the result after
+compensation.
+
+These choices form a reproducible subjective mapping, not a physical LED or
+colorimetric model. See `OBSERVATIONS.md` for evidence and limitations.
+
+## Reproduction
+
+Print model metadata and sample mappings without touching Bluetooth or daemon
+configuration:
 
 ```bash
-python -m pip install '.[calibration]'
-python calibration/fit.py
+python calibration/model.py '#89DCEB' '#F5C2E7' '#F9E2AF'
 ```
+
+Verify anchors, continuity, bounds, determinism, and agreement with the runtime
+implementation over 4,096 RGB inputs:
+
+```bash
+PYTHONPATH=src python -m unittest discover -s calibration -p test_model.py
+```
+
+The calibration and runtime require only the Python standard library.

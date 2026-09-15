@@ -162,37 +162,49 @@ the same CSS color on the desktop. A manually selected `#FF4000` looked closer
 to the intended desktop orange on this speaker.
 
 This is a physical gamut/calibration difference, not a preset command or RGB
-encoding difference. The model family was fitted from 20 subjective chromatic
-target-to-ConneX matches and evaluated on eight withheld chromatic matches, all
-collected at brightness `50`. Four neutral observations were excluded from
-coefficient estimation because no tested RGB command removed the blue cast. A
-saturation-scaled regularized radial-basis correction keeps neutral RGB
-unchanged by design. Held-out command-space RMSE fell from `77.1` for raw RGB to `47.8`;
-the final profile refits 28 chromatic observations and maps `#E68E0D` to
-approximately `#FD3600`.
+encoding difference. An initial subjective matrix model established that
+compensated commands could improve chromatic matching, but it preserved neutral
+RGB and performed poorly on several withheld accents. That superseded model and
+its source data remain available through Git history rather than the active
+calibration tree.
 
-Nine fitting targets were explicitly marked outside the QR65's reproducible
-gamut. Dark saturated colors could remain too bright even with a full-scale
-command, and neutral colors retained a blue cast. The profile is subjective,
-specific to the tested unit, display, viewing conditions, and 50% brightness;
-it is not an instrument-measured physical characterization. Literal RGB remains
-the default and live A/B fallback.
+The accepted `subjective-v1` profile supersedes that runtime model. It combines
+12 saturated hues, three repeats, a compensated white command `#FFE080`, and three pastel
+preferences. White-command trials improved neutrality, correcting the earlier
+decision to preserve neutral RGB unchanged. The runtime uses hue interpolation,
+a saturation preference curve, and local pastel adjustments, with black preserved.
+Targets through 10% HSV saturation use the compensated white anchor because tiny
+near-neutral channel differences otherwise selected visibly cold hue corrections;
+a smooth 10%-20% transition rejoins the fitted chromatic model.
+Orange `#E68E0D` now maps to `#E64003`. The user preferred the new profile over the
+old one on three additional pastel accents and the original orange. Measurements
+used speaker brightness 50%, monitor 75%, and disabled night light; one yellow
+brightness check also retained hue at 25%. This does not establish uniform behavior
+across all brightness levels. See `calibration/README.md` and
+`calibration/OBSERVATIONS.md`.
 
 ## Connection Constraint
 
 Confirmed behavior:
 
-1. BLE advertises while the QR65 is in Bluetooth input mode with a Bluetooth
-   Classic connection.
-2. BLE does not advertise while the phone is disconnected and wired input is
-   active.
-3. A BLE connection established in Bluetooth mode remains connected after the
-   QR65 switches to wired input and its Classic phone connection drops.
-4. Static-color writes over that held BLE connection do not interrupt active
+1. After a cold start, BLE advertises when the QR65 is in Bluetooth input mode
+   with a Bluetooth Classic audio connection. A paired Linux computer works; a
+   phone and ConneX are not required.
+2. Before a power cycle, a warm QR65 allowed a fresh BLE connection in Bluetooth
+   input without Classic audio. This is not a reliable cold-start path.
+3. BLE does not advertise after a cold start on RCA with no Classic connection.
+   In that state, neither Linux nor ConneX found a reachable controller, and
+   Linux could not page the paired Classic endpoint.
+4. A BLE connection established in Bluetooth mode remains connected after the
+   QR65 switches to wired input and its Classic audio connection drops.
+5. Static-color writes over that held BLE connection do not interrupt active
    analog playback or change PipeWire's analog sink.
+6. With Bluetooth input retained, normal operating-system audio reconnection
+   and daemon BLE retry recovered after speaker power cycles and computer boots.
 
 This is why the runtime uses a persistent daemon rather than connecting once
-for every color-source change.
+for every color-source change. The daemon intentionally does not pair Classic
+devices, connect audio profiles, select codecs, or change PipeWire routing.
 
 ## Safety Boundary
 
@@ -211,7 +223,7 @@ volume, and unsupported lighting modes are not exposed.
 
 - Whether behavior changes on other QR65 firmware versions
 - Whether the unpublished EDF QR65 uses the same array and mode mapping
-- Whether a host-only method can trigger BLE advertising without a Classic
-  connection and Bluetooth input mode
+- Whether a cold host-only method can trigger BLE advertising without both a
+  Classic connection and Bluetooth input mode
 - Whether the QR65 eventually expires an otherwise idle held BLE connection
 - An instrument-measured physical LED color profile across brightness levels

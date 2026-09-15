@@ -10,9 +10,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .ble import QR65_SERVICE_UUIDS
 from .config import Config
 from .desired import parse_rgb, read_request, state_file
+from .protocol import QR65_SERVICE_UUIDS
 
 STATUS_VERSION = 1
 STATUS_STALE_SECONDS = 60
@@ -66,8 +66,6 @@ def write_runtime_status(
         ) as temporary:
             json.dump(payload, temporary, separators=(",", ":"))
             temporary.write("\n")
-            temporary.flush()
-            os.fsync(temporary.fileno())
             temporary_path = Path(temporary.name)
         os.replace(temporary_path, path)
     finally:

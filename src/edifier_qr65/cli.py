@@ -13,10 +13,7 @@ import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 
-from bleak.exc import BleakError
-
-from . import __version__, daemon
-from .ble import EDIFIER_MANUFACTURER_ID, discover, inspect, query_ambient_light, set_static_color
+from . import __version__
 from .config import load_config
 from .protocol import decode_ambient_light, encode_static_color
 from .status import build_status, read_runtime_status, status_file, write_runtime_status
@@ -111,6 +108,8 @@ def _daemon_is_active() -> bool:
 
 
 async def _scan(timeout: float, include_all: bool) -> int:
+    from .ble import EDIFIER_MANUFACTURER_ID, discover
+
     timeout = _positive_float(timeout, "timeout")
     devices = await discover(timeout, include_all)
     if not devices:
@@ -131,6 +130,8 @@ async def _scan(timeout: float, include_all: bool) -> int:
 
 
 async def _inspect(address: str | None, timeout: float) -> int:
+    from .ble import discover, inspect
+
     timeout = _positive_float(timeout, "timeout")
     with ownership_lock(blocking=False):
         device = address
@@ -150,6 +151,8 @@ async def _inspect(address: str | None, timeout: float) -> int:
 
 
 async def _query_light(address: str | None, timeout: float) -> int:
+    from .ble import discover, query_ambient_light
+
     timeout = _positive_float(timeout, "timeout")
     with ownership_lock(blocking=False):
         device = address
@@ -195,6 +198,8 @@ async def _set_color(
         request_color(value)
         print(f"Queued {value.upper()}")
         return 0
+    from .ble import discover, set_static_color
+
     timeout = _positive_float(timeout, "timeout")
     delay = _nonnegative_float(delay, "delay")
     with ownership_lock(blocking=False):
@@ -227,7 +232,7 @@ def _control_daemon(action: str) -> None:
             write_runtime_status(
                 "released",
                 runtime["appliedColor"],
-                "BLE released. Connect the phone to QR65 Bluetooth audio, then open ConneX.",
+                "BLE released. Keep a paired audio host connected if ConneX cannot see the QR65.",
                 applied_brightness=runtime["appliedBrightness"],
             )
             return
@@ -245,18 +250,28 @@ def _control_daemon(action: str) -> None:
                 time.sleep(0.05)
 
 
+def _run_ble(coroutine) -> int:
+    """Run a BLE command without importing Bleak for local-only commands."""
+    from bleak.exc import BleakError
+
+    try:
+        return asyncio.run(coroutine)
+    except BleakError as error:
+        raise RuntimeError(str(error)) from error
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the QR65 command-line interface."""
     args = _parser().parse_args(argv)
     try:
         if args.command == "scan":
-            return asyncio.run(_scan(args.timeout, args.all))
+            return _run_ble(_scan(args.timeout, args.all))
         if args.command == "inspect":
-            return asyncio.run(_inspect(args.device, args.timeout))
+            return _run_ble(_inspect(args.device, args.timeout))
         if args.command == "query-light":
-            return asyncio.run(_query_light(args.device, args.timeout))
+            return _run_ble(_query_light(args.device, args.timeout))
         if args.command == "set-color":
-            return asyncio.run(
+            return _run_ble(
                 _set_color(
                     args.color,
                     args.device,
@@ -321,12 +336,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                     print(f"Message: {value['message']}")
             return 0
         if args.command == "daemon":
+            from . import daemon
+
             try:
                 asyncio.run(daemon.run())
             except KeyboardInterrupt:
                 pass
             return 0
-    except (BleakError, ConnectionError, OSError, RuntimeError, subprocess.SubprocessError,
+    except (ConnectionError, OSError, RuntimeError, subprocess.SubprocessError,
             TimeoutError, UnicodeError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
