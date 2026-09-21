@@ -87,7 +87,7 @@ def test_api_version_json_contract(capsys) -> None:
     assert main(["api-version", "--json"]) == 0
     assert json.loads(capsys.readouterr().out) == {
         "apiVersion": 1,
-        "daemonVersion": "0.1.0",
+        "daemonVersion": "0.1.1",
         "statusVersion": 1,
     }
 

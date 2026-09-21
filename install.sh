@@ -146,7 +146,7 @@ install -d -m 0700 "$runtime_dir" "$config_home/edifier-qr65" \
   "$state_home/edifier-qr65"
 install -d "$HOME/.local/bin" "$config_home/systemd/user" "$releases"
 temporary_dir=$(mktemp -d "$runtime_dir/.install.XXXXXX")
-release_dir=$(mktemp -d "$releases/0.1.0.XXXXXX")
+release_dir=$(mktemp -d "$releases/0.1.1.XXXXXX")
 previous_release=""
 previous_launcher=""
 service_existed=0
@@ -224,7 +224,7 @@ systemctl --user restart edifier-qr65.service
 temporary_marker="$temporary_dir/install-state"
 {
   printf 'owner=edifier-qr65\n'
-  printf 'version=0.1.0\n'
+  printf 'version=0.1.1\n'
   printf 'release=%s\n' "$(basename -- "$release_dir")"
   printf 'service=%s\n' "$(sha256sum -- "$service" | cut -d' ' -f1)"
 } > "$temporary_marker"
