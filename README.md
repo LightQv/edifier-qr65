@@ -278,7 +278,7 @@ edifier-qr65 api-version --json
 The JSON form is compact and has these exact keys:
 
 ```json
-{"apiVersion":1,"daemonVersion":"0.1.0","statusVersion":1}
+{"apiVersion":1,"daemonVersion":"0.1.1","statusVersion":1}
 ```
 
 Consumer API version `1` consists of the explicit-color control commands

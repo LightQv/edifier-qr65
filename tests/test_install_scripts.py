@@ -31,7 +31,7 @@ if [[ $1 == wheel ]]; then
   while (( $# )); do
     if [[ $1 == --wheel-dir ]]; then
       mkdir -p "$2"
-      : > "$2/edifier_qr65-0.1.0-py3-none-any.whl"
+      : > "$2/edifier_qr65-0.1.1-py3-none-any.whl"
       exit 0
     fi
     shift
@@ -131,7 +131,7 @@ def test_installer_adopts_legacy_combined_installation(tmp_path) -> None:
     assert "owner=edifier-qr65\n" in marker
     assert not hook.exists()
     assert service.is_file()
-    assert "/releases/0.1.0." in str(launcher.resolve())
+    assert "/releases/0.1.1." in str(launcher.resolve())
 
 
 def test_failed_restart_rolls_back_current_release(tmp_path) -> None:
